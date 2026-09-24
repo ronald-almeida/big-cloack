@@ -7,7 +7,7 @@
     "ADMIN_EMAIL": "ronald.almeida307@gmail.com",
     "ADMIN_ORIGIN": "https://aprovabmyksh.com",
     "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": "",
+    "ACCESS_AUD": ""
   },
-  "services": [{ "binding": "ADMIN_API", "service": "big-cloack-api" }],
+  "services": [{ "binding": "ADMIN_API", "service": "big-cloack-api" }]
 }

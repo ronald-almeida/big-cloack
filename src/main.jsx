@@ -1,3 +1,4 @@
+import DomainsPanel from "./DomainsPanel.jsx";
 import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -18,6 +19,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import QRCode from "qrcode";
+import WaitingEditor from "./WaitingEditor.jsx";
+import AccessLogs from "./AccessLogs.jsx";
 import "./style.css";
 const empty = {
   name: "",
@@ -26,6 +29,7 @@ const empty = {
   device: "all",
   real_urls: [],
   waiting_url: "",
+  waiting_page: { theme: "sky" },
 };
 async function api(path, method = "GET", body) {
   const response = await fetch("/api/" + path, {
@@ -51,7 +55,6 @@ function App() {
     [search, setSearch] = useState(""),
     [editor, setEditor] = useState(null),
     [urls, setUrls] = useState(""),
-    [domain, setDomain] = useState(""),
     [selectedDomain, setSelectedDomain] = useState(""),
     [notice, setNotice] = useState(""),
     [error, setError] = useState(""),
@@ -182,6 +185,7 @@ function App() {
     ["Visão geral", LayoutDashboard],
     ["Links", Link],
     ["Analytics", BarChart3],
+    ["Acessos", Search],
     ["Domínios", Globe],
   ];
   const filtered = links.filter((l) =>
@@ -251,14 +255,16 @@ function App() {
               <p className="eyebrow">SEU CONTROLE, EM UM SÓ LUGAR</p>
               <h1>{page}</h1>
               <p>
-                {page === "Domínios"
-                  ? "Conecte seus domínios e compartilhe links com sua marca."
-                  : page === "Analytics"
-                    ? "Entenda de onde vêm os acessos e para onde eles vão."
-                    : "Gerencie destinos. Acompanhe cada acesso."}
+                {page === "Acessos"
+                  ? "Veja quando cada link foi aberto e qual destino foi aplicado."
+                  : page === "Domínios"
+                    ? "Conecte seus domínios e compartilhe links com sua marca."
+                    : page === "Analytics"
+                      ? "Entenda de onde vêm os acessos e para onde eles vão."
+                      : "Gerencie destinos. Acompanhe cada acesso."}
               </p>
             </div>
-            {page !== "Domínios" && (
+            {!["Domínios", "Acessos"].includes(page) && (
               <button className="primary" onClick={() => edit()}>
                 <Plus size={18} />
                 Criar link
@@ -279,7 +285,7 @@ function App() {
               {notice}
             </div>
           )}
-          {page !== "Domínios" && (
+          {!["Domínios", "Acessos"].includes(page) && (
             <>
               <div className="period">
                 <span>
@@ -602,113 +608,16 @@ function App() {
               </section>
             </div>
           )}
+          {page === "Acessos" && <AccessLogs links={links} />}
           {page === "Domínios" && (
-            <>
-              <section className="domain-add">
-                <div className="empty-icon">
-                  <Globe size={24} />
-                </div>
-                <div>
-                  <h2>Adicionar domínio de redirect</h2>
-                  <p>
-                    Cadastre o domínio e conecte-o ao redirector na Cloudflare.
-                  </p>
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      action(async () => {
-                        await api("domains", "POST", { hostname: domain });
-                        setDomain("");
-                        setNotice(
-                          "Domínio cadastrado. Conecte-o na Cloudflare e verifique.",
-                        );
-                      });
-                    }}
-                  >
-                    <input
-                      aria-label="Novo domínio"
-                      placeholder="links.seudominio.com"
-                      required
-                      value={domain}
-                      onChange={(e) => setDomain(e.target.value)}
-                    />
-                    <button className="primary" disabled={busy}>
-                      <Plus size={17} />
-                      Adicionar domínio
-                    </button>
-                  </form>
-                </div>
-              </section>
-              <section className="table-card">
-                <div className="section-heading">
-                  <h2>
-                    Seus domínios{" "}
-                    <span className="count">{domains.length}</span>
-                  </h2>
-                </div>
-                {!domains.length && (
-                  <div className="empty">
-                    <Globe size={28} />
-                    <h3>Nenhum domínio cadastrado</h3>
-                    <p>Adicione seu primeiro domínio acima.</p>
-                  </div>
-                )}
-                {domains.map((d) => (
-                  <div className="domain-row" key={d.id}>
-                    <Globe size={22} />
-                    <div>
-                      <b>{d.hostname}</b>
-                      <small>
-                        {d.verified
-                          ? "Pronto para compartilhar"
-                          : "Conexão pendente"}
-                      </small>
-                    </div>
-                    <span
-                      className={`badge ${d.verified ? "real" : "waiting"}`}
-                    >
-                      {d.verified ? "Ativo" : "Pendente"}
-                    </span>
-                    <button
-                      className="secondary"
-                      disabled={busy}
-                      onClick={() =>
-                        action(async () => {
-                          await api(`domains/${d.id}/verify`, "POST");
-                          setNotice("Domínio verificado.");
-                        })
-                      }
-                    >
-                      Verificar conexão
-                    </button>
-                    <button
-                      aria-label={`Excluir domínio ${d.hostname}`}
-                      onClick={() =>
-                        setConfirm({
-                          type: "domains",
-                          id: d.id,
-                          name: d.hostname,
-                        })
-                      }
-                    >
-                      <Trash2 size={17} />
-                    </button>
-                  </div>
-                ))}
-              </section>
-              <div className="help">
-                <Shield size={21} />
-                <div>
-                  <b>Como conectar seu domínio</b>
-                  <p>
-                    Na Cloudflare, abra Workers & Pages → big-cloack-redirect →
-                    Settings → Domains & Routes → Add → Custom Domain. Use o
-                    domínio cadastrado e, após a ativação do certificado, clique
-                    em Verificar conexão.
-                  </p>
-                </div>
-              </div>
-            </>
+            <DomainsPanel
+              domains={domains}
+              request={api}
+              refresh={refresh}
+              onDelete={(d) =>
+                setConfirm({ type: "domains", id: d.id, name: d.hostname })
+              }
+            />
           )}
           <div className="page-foot">
             Big Cloak <span>Workers · D1 · KV · Pages</span>
@@ -721,7 +630,7 @@ function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-title"
-            className="modal"
+            className="modal link-editor"
           >
             <div className="modal-head">
               <div>
@@ -824,7 +733,8 @@ function App() {
                 />
               </label>
               <label>
-                URL de espera <span>Opcional · página “Em breve” se vazio</span>
+                URL de espera{" "}
+                <span>Opcional · página institucional abaixo se vazio</span>
                 <input
                   type="url"
                   value={editor.waiting_url}
@@ -834,6 +744,14 @@ function App() {
                   placeholder="https://seusite.com/em-breve"
                 />
               </label>
+              <WaitingEditor
+                value={editor.waiting_page}
+                name={editor.name}
+                external={Boolean(editor.waiting_url)}
+                onChange={(page) =>
+                  setEditor({ ...editor, waiting_page: page })
+                }
+              />
               {error && (
                 <p className="form-error" role="alert">
                   {error}

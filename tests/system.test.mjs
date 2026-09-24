@@ -205,7 +205,7 @@ test("authenticated CRUD, redirects, analytics, cache invalidation and security"
     );
     response = await visit();
     assert.equal(response.status, 200);
-    assert.match(await response.text(), /Estamos preparando/);
+    assert.match(await response.text(), /Conheça nosso trabalho/);
     await Promise.all(pending);
     assert.equal((await h.call("links/" + link.id, "DELETE")).status, 200);
     assert.equal((await visit()).status, 404);

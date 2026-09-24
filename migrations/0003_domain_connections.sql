@@ -1,0 +1,7 @@
+ALTER TABLE domains ADD COLUMN connection_status TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE domains ADD COLUMN zone_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE domains ADD COLUMN zone_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE domains ADD COLUMN cloudflare_domain_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE domains ADD COLUMN nameservers TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE domains ADD COLUMN connection_message TEXT NOT NULL DEFAULT '';
+ALTER TABLE domains ADD COLUMN connection_lock_until INTEGER NOT NULL DEFAULT 0;

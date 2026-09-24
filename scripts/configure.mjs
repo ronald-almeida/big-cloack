@@ -16,6 +16,8 @@ for (const file of [
 ]) {
   const config = JSON.parse(await readFile(file, "utf8"));
   config.account_id = process.env.CLOUDFLARE_ACCOUNT_ID;
+  if (file === "wrangler.api.jsonc")
+    config.vars.CLOUDFLARE_ACCOUNT_ID = process.env.CLOUDFLARE_ACCOUNT_ID;
   if (config.d1_databases)
     config.d1_databases[0].database_id = process.env.D1_DATABASE_ID;
   if (config.kv_namespaces)

@@ -1,3 +1,8 @@
+import {
+  cloudflareConfigured,
+  connectDomain,
+  verifyDomain,
+} from "./domain-connect.mjs";
 import { authenticate } from "./auth.mjs";
 import { validateLink, analyticsSince } from "./rules.mjs";
 const json = (data, status = 200) =>
@@ -56,14 +61,18 @@ export default {
           "SELECT l.*, (SELECT COUNT(*) FROM clicks c WHERE c.link_id=l.id) AS clicks FROM links l ORDER BY created_at DESC LIMIT 1000",
         ).all();
         return json(
-          results.map((l) => ({ ...l, real_urls: JSON.parse(l.real_urls) })),
+          results.map((l) => ({
+            ...l,
+            real_urls: JSON.parse(l.real_urls),
+            waiting_page: JSON.parse(l.waiting_page || "{}"),
+          })),
         );
       }
       if (path === "/api/links" && request.method === "POST") {
         const l = validateLink(await body(request)),
           id = crypto.randomUUID();
         await env.DB.prepare(
-          "INSERT INTO links(id,slug,name,mode,device,real_urls,waiting_url,version) VALUES(?,?,?,?,?,?,?,?)",
+          "INSERT INTO links(id,slug,name,mode,device,real_urls,waiting_url,waiting_page,version) VALUES(?,?,?,?,?,?,?,?,?)",
         )
           .bind(
             id,
@@ -73,6 +82,7 @@ export default {
             l.device,
             JSON.stringify(l.real_urls),
             l.waiting_url,
+            JSON.stringify(l.waiting_page),
             crypto.randomUUID(),
           )
           .run();
@@ -82,7 +92,7 @@ export default {
       if (match && request.method === "PUT") {
         const l = validateLink(await body(request));
         const r = await env.DB.prepare(
-          "UPDATE links SET slug=?,name=?,mode=?,device=?,real_urls=?,waiting_url=?,version=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+          "UPDATE links SET slug=?,name=?,mode=?,device=?,real_urls=?,waiting_url=?,waiting_page=?,version=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
         )
           .bind(
             l.slug,
@@ -91,6 +101,7 @@ export default {
             l.device,
             JSON.stringify(l.real_urls),
             l.waiting_url,
+            JSON.stringify(l.waiting_page),
             crypto.randomUUID(),
             match[1],
           )
@@ -131,45 +142,99 @@ export default {
           .run();
         return json({ id, hostname, verified: 0 }, 201);
       }
-      const dm = path.match(/^\/api\/domains\/([a-f0-9-]+)(\/verify)?$/);
+      if (path === "/api/integrations/cloudflare" && request.method === "GET")
+        return json({ configured: cloudflareConfigured(env) });
+      const dm = path.match(
+        /^\/api\/domains\/([a-f0-9-]+)(\/(?:verify|connect))?$/,
+      );
       if (dm && request.method === "DELETE" && !dm[2]) {
+        const connecting = await env.DB.prepare(
+          "SELECT connection_lock_until FROM domains WHERE id=?",
+        )
+          .bind(dm[1])
+          .first();
+        if (connecting?.connection_lock_until > Date.now())
+          return json(
+            { error: "Aguarde a conexão terminar antes de excluir." },
+            409,
+          );
         await env.DB.prepare("DELETE FROM domains WHERE id=?")
           .bind(dm[1])
           .run();
         return json({ ok: true });
       }
       if (dm && dm[2] && request.method === "POST") {
-        const d = await env.DB.prepare("SELECT * FROM domains WHERE id=?")
+        const domain = await env.DB.prepare("SELECT * FROM domains WHERE id=?")
           .bind(dm[1])
           .first();
-        if (!d) return json({ error: "Domínio não encontrado." }, 404);
-        let verified = false;
-        try {
-          const res = await fetch("https://" + d.hostname + "/__domain-check", {
-            redirect: "manual",
-            signal: AbortSignal.timeout(7000),
-          });
-          if (
-            res.ok &&
-            res.headers.get("content-type")?.includes("application/json")
-          ) {
-            const data = await body(res);
-            verified =
-              data.service === "big-cloack-redirect" && data.domain_id === d.id;
+        if (!domain) return json({ error: "Domínio não encontrado." }, 404);
+        if (dm[2] === "/connect")
+          return json(await connectDomain(env, domain, await body(request)));
+        return json(await verifyDomain(env, domain));
+      }
+      if (path === "/api/logs" && request.method === "GET") {
+        const conditions = [],
+          params = [];
+        const link = u.searchParams.get("link"),
+          device = u.searchParams.get("device"),
+          destination = u.searchParams.get("destination"),
+          cursor = u.searchParams.get("cursor");
+        for (const [field, value, allowed] of [
+          ["device", device, ["mobile", "desktop"]],
+          ["destination", destination, ["real", "waiting"]],
+        ]) {
+          if (value && !allowed.includes(value))
+            throw new Error("Filtro de acesso inválido.");
+          if (value) {
+            conditions.push(`c.${field}=?`);
+            params.push(value);
           }
-        } catch {}
-        await env.DB.prepare("UPDATE domains SET verified=? WHERE id=?")
-          .bind(verified ? 1 : 0, d.id)
-          .run();
-        return verified
-          ? json({ ok: true })
-          : json(
-              {
-                error:
-                  "Conecte este domínio ao Worker big-cloack-redirect em Cloudflare → Workers → Settings → Domains & Routes e tente novamente.",
-              },
-              422,
-            );
+        }
+        if (link) {
+          conditions.push("c.link_id=?");
+          params.push(link);
+        }
+        if (cursor) {
+          if (
+            !/^[1-9]\d*$/.test(cursor) ||
+            !Number.isSafeInteger(Number(cursor))
+          )
+            throw new Error("Página inválida.");
+          conditions.push("c.id<?");
+          params.push(Number(cursor));
+        }
+        for (const [field, operator] of [
+          ["from", ">="],
+          ["to", "<"],
+        ]) {
+          const date = u.searchParams.get(field);
+          if (date) {
+            if (
+              !/^\d{4}-\d{2}-\d{2}T/.test(date) ||
+              !Number.isFinite(Date.parse(date))
+            )
+              throw new Error("Período inválido.");
+            conditions.push(`c.created_at${operator}?`);
+            params.push(new Date(date).toISOString());
+          }
+        }
+        if (
+          u.searchParams.get("from") &&
+          u.searchParams.get("to") &&
+          Date.parse(u.searchParams.get("from")) >=
+            Date.parse(u.searchParams.get("to"))
+        )
+          throw new Error("O início deve ser anterior ao fim do período.");
+        const { results } = await env.DB.prepare(
+          `SELECT c.id,c.created_at,c.hostname,c.device,c.destination,c.country,c.link_id,l.name AS link_name,l.slug FROM clicks c JOIN links l ON l.id=c.link_id ${conditions.length ? "WHERE " + conditions.join(" AND ") : ""} ORDER BY c.id DESC LIMIT 51`,
+        )
+          .bind(...params)
+          .all();
+        const items = results.slice(0, 50);
+        return json({
+          items,
+          next_cursor: results.length > 50 ? String(items.at(-1).id) : null,
+        });
       }
       if (path === "/api/analytics" && request.method === "GET") {
         const days = [7, 30, 90].includes(Number(u.searchParams.get("days")))

@@ -1,16 +1,15 @@
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import api from "../workers/api.mjs";
 export async function harness() {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys=ON;");
-  db.exec(
-    readFileSync(
-      new URL("../migrations/0001_initial.sql", import.meta.url),
-      "utf8",
-    ),
-  );
+  const migrations = new URL("../migrations/", import.meta.url);
+  for (const file of readdirSync(migrations)
+    .filter((f) => f.endsWith(".sql"))
+    .sort())
+    db.exec(readFileSync(new URL(file, migrations), "utf8"));
   const DB = {
     prepare(sql) {
       return {

@@ -8,9 +8,10 @@ Gerenciador de links nativo Cloudflare: painel React no Pages, API Worker privad
 - Modo Real/Espera. Em Real, somente o dispositivo selecionado recebe uma URL real; os demais recebem Espera. Em Espera, todos recebem Espera.
 - Mobile inclui tablets. Classificação por Client Hint e User-Agent; é aproximada, não uma garantia de identidade. Não existem regras especiais para bots/crawlers.
 - Até 30 URLs reais com distribuição aleatória uniforme por acesso (não é alternância sequencial).
-- Espera pode ser URL externa ou página interna “Em breve”.
+- Espera pode ser URL externa ou página institucional interna com cinco variações: Azul suave, Verde editorial, Escuro moderno, Areia clássico e Violeta. Cada link salva seu tema e conteúdo: empresa, título, apresentação, serviços, cidade, CNPJ, abertura, WhatsApp e e-mail. Dados opcionais vazios ficam ocultos. Não há importação automática de identidade empresarial do HTML de referência. A URL externa, quando preenchida, tem prioridade.
+- **Acessos** mostra o histórico individual com data/hora, dispositivo, Real/Espera, link, domínio e país. Filtros por link, dispositivo, destino e intervalo; paginação de 50 registros sem repetir linhas quando chegam novos acessos. Horários e filtros usam o fuso do navegador (mostrado na tela); timestamps são armazenados em UTC. O final do intervalo é exclusivo. Nome/slug refletem o cadastro atual; excluir um link apaga seu histórico, conforme a confirmação do painel.
 - Analytics por período (7/30/90 dias), link, dispositivo, país e domínio; contadores totais por link. Datas em UTC, contagens de requisições GET, sem IPs ou identificação de visitantes únicos. HEAD não conta.
-- Cadastro e verificação de domínios; copiar link pelo domínio escolhido; QR Code gerado localmente no navegador e baixável em PNG.
+- Conexão de domínios pelo painel: cadastro na Cloudflare quando necessário, vínculo com o redirector, DNS e acompanhamento do HTTPS. Copiar link pelo domínio escolhido; QR Code gerado localmente no navegador e baixável em PNG.
 - Cloudflare Access, restrito a `ronald.almeida307@gmail.com`, validado também na API e no Pages (assinatura, emissor, audiência e expiração do JWT).
 
 ## Status desta entrega
@@ -30,7 +31,11 @@ node scripts/preview.mjs
 
 Preview local em `http://127.0.0.1:4173`, com banco SQLite em memória, adaptador D1 e JWT de teste efêmero. O preview começa vazio, descarta os dados ao parar e escuta somente em loopback. Ele usa os mesmos handlers da API; nunca é incluído no deploy. Não é um substituto do teste em Cloudflare.
 
-No ambiente desktop com restrições de subprocessos, os comandos equivalentes usados foram `node --test --test-isolation=none tests/system.test.mjs` e `node node_modules/vite/bin/vite.js build --configLoader native`.
+No ambiente desktop com restrições de subprocessos, os comandos equivalentes usados foram `node --test --test-isolation=none tests/*.test.mjs` e `node node_modules/vite/bin/vite.js build --configLoader native`.
+
+Para testar com dados descartáveis: `node scripts/preview.mjs --fixtures`. O link local `/r/teste-local` passa pelo redirector real com os bindings simulados e registra acessos; configure Espera no editor para exibir a página. `/preview/waiting/sky` (ou forest, midnight, sand, violet) mostra uma variação com textos de exemplo, sem contar acessos. Nada disso adiciona dados ao banco de produção.
+
+As migrations `0002_waiting_pages_and_logs.sql` e `0003_domain_connections.sql` adicionam as configurações de Espera, o índice do histórico e o estado de conexão dos domínios sem apagar os dados existentes. Aplique todas as migrations antes de publicar esta versão da API e do redirector.
 
 ## Publicação
 
@@ -62,7 +67,21 @@ pnpm deploy:panel
 
 ## Adicionar domínios de redirect
 
-No painel, abra **Domínios**, cadastre o hostname, e depois conecte esse hostname em **Cloudflare → Workers & Pages → big-cloack-redirect → Settings → Domains & Routes → Add → Custom Domain**. Aguarde DNS/certificado e clique **Verificar conexão** no painel. O domínio precisa estar em uma zona Cloudflare acessível na conta. O painel não armazena token de administração da Cloudflare; por isso o vínculo de infraestrutura é feito no dashboard Cloudflare. Excluir um domínio do painel interrompe seu uso, mas não remove o vínculo externo na Cloudflare.
+Configure a integração uma única vez no servidor. Crie um token Cloudflare restrito à conta escolhida, com Workers Scripts Edit, Workers Routes Edit, Zone Read e DNS Read para as zonas desejadas. Para permitir criar novas zonas pelo painel, inclua Zone Edit e acesso às novas zonas. O `scripts/configure.mjs` preenche `CLOUDFLARE_ACCOUNT_ID` na API. Grave o token apenas como secret do Worker:
+
+```sh
+pnpm exec wrangler secret put CLOUDFLARE_API_TOKEN -c wrangler.api.jsonc
+```
+
+A conexão Cloudflare do assistente não fornece automaticamente essa credencial ao aplicativo publicado. Nunca coloque o token no frontend, no GitHub ou em mensagens. O painel recebe apenas o estado configurado/pendente.
+
+Em **Domínios**, informe o hostname e clique **Adicionar e conectar**. Para uma zona ativa da conta autorizada, a API vincula o endereço ao Worker `big-cloack-redirect`; a Cloudflare prepara o DNS e o certificado. O painel verifica a resposta HTTPS do redirector antes de marcar o domínio como Ativo. Enquanto a tela estiver aberta, acompanha a ativação a cada 20 segundos. Também é possível retomar com **Conectar**, **Continuar conexão** ou **Verificar conexão**.
+
+Se a zona não existir na conta, o painel solicita o domínio raiz e permite **Adicionar à Cloudflare**. Em seguida mostra os nameservers. A troca desses servidores precisa ser feita no registrador onde o domínio foi comprado; o aplicativo não tem acesso ao registrador. Preserve os registros de site e e-mail na Cloudflare antes dessa troca. Após a zona ficar ativa, o painel continua o vínculo automaticamente enquanto estiver aberto.
+
+A API não substitui registros A/AAAA/CNAME existentes nem domínios vinculados a outro Worker. Nesses casos mostra o conflito para correção ou escolha de um subdomínio livre. Tentativas repetidas reutilizam um vínculo já criado. Excluir um domínio do painel interrompe seu uso, mas não remove o vínculo externo na Cloudflare.
+
+Testes automatizados cobrem vínculo, repetição, conflito DNS, criação de zona, nameservers e erros de permissão com a API Cloudflare simulada. A conexão real de domínio permanece pendente da credencial e do deploy. Referências: [Custom Domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/) e [permissões de Workers](https://developers.cloudflare.com/workers/authorization/workers/).
 
 ## Arquitetura e consistência
 

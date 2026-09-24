@@ -928,3 +928,227 @@ footer {
     max-height: calc(100vh - 24px);
   }
 }
+:root {
+  --waiting-border: #e0e6f0;
+}
+.modal.link-editor {
+  width: 1060px;
+}
+.waiting-editor {
+  border-top: 1px solid var(--waiting-border);
+  margin-top: 24px;
+  padding-top: 8px;
+}
+.waiting-editor .section-heading {
+  padding: 15px 0;
+}
+.waiting-editor .section-heading h2 {
+  font-size: 17px;
+}
+.theme-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 22px;
+}
+.theme-options button {
+  padding: 10px 12px;
+  border: 1px solid var(--waiting-border);
+  border-radius: 8px;
+  font-size: 11px;
+}
+.theme-options button[aria-pressed="true"] {
+  background: #edf1ff;
+  border-color: #6b80dc;
+  color: #3f58b0;
+}
+.theme-options span {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+}
+.waiting-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.3fr);
+  gap: 24px;
+}
+.waiting-fields > label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 15px;
+}
+.waiting-fields .muted {
+  font-size: 11px;
+  margin-bottom: 16px;
+}
+.waiting-preview {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  min-width: 0;
+}
+.preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.preview-canvas {
+  overflow: hidden;
+  border: 1px solid var(--waiting-border);
+  border-radius: 10px;
+  background: #e9edf3;
+  height: 560px;
+}
+.preview-canvas iframe {
+  border: none;
+  width: 100%;
+  height: 100%;
+  background: white;
+}
+.preview-canvas.mobile {
+  max-width: 360px;
+  margin: auto;
+}
+.logs-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 0 25px 16px;
+}
+.logs-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 11px;
+  color: #67758a;
+  flex: 1;
+  min-width: 130px;
+}
+.logs-filters input {
+  font-size: 11px;
+}
+.logs-timezone {
+  font-size: 11px;
+  padding: 0 25px 20px;
+}
+.logs-card .error {
+  margin: 0 25px 20px;
+}
+.device-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+@media (max-width: 800px) {
+  nav {
+    overflow-x: auto;
+  }
+  nav button {
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: auto;
+    flex: 1;
+  }
+  .waiting-grid {
+    grid-template-columns: 1fr;
+  }
+  .waiting-preview {
+    position: static;
+  }
+  .waiting-editor .section-heading {
+    align-items: flex-start;
+  }
+  .preview-canvas {
+    height: 480px;
+  }
+  .theme-options button {
+    flex: 1;
+    white-space: nowrap;
+  }
+}
+.integration-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border: 1px solid #e6dcc0;
+  border-radius: 10px;
+  background: #fffaf0;
+  margin-bottom: 22px;
+}
+.integration-card.ready {
+  background: #edf8f4;
+  border-color: #cbe7dc;
+}
+.integration-card > svg {
+  flex-shrink: 0;
+  color: #927036;
+}
+.integration-card.ready > svg {
+  color: #368568;
+}
+.integration-card b {
+  font-size: 13px;
+}
+.integration-card p {
+  font-size: 12px;
+  margin-top: 4px;
+}
+.domain-message {
+  padding: 14px 20px;
+  background: #edf3fc;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+.domain-connection .domain-row {
+  flex-wrap: wrap;
+}
+.domain-connection .domain-row > div {
+  min-width: 160px;
+}
+.domain-connection .domain-row small {
+  max-width: 520px;
+  line-height: 1.6;
+}
+.zone-create {
+  padding: 0 25px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+.zone-create label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+.zone-create p {
+  width: 100%;
+  font-size: 11px;
+}
+.nameservers {
+  margin: 0 25px 24px;
+  background: #f3f6fb;
+  border-radius: 8px;
+  padding: 20px;
+}
+.nameservers b {
+  font-size: 13px;
+}
+.nameservers p {
+  font-size: 12px;
+  margin-top: 8px;
+}
+.nameservers code {
+  font-size: 12px;
+}
+.nameservers ul {
+  padding-left: 18px;
+}

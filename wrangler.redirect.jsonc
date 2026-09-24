@@ -11,10 +11,10 @@
       "binding": "DB",
       "database_name": "big-cloack",
       "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations",
-    },
+      "migrations_dir": "migrations"
+    }
   ],
   "kv_namespaces": [
-    { "binding": "CACHE", "id": "00000000000000000000000000000000" },
-  ],
+    { "binding": "CACHE", "id": "00000000000000000000000000000000" }
+  ]
 }

@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve, extname } from "node:path";
 import { harness } from "../tests/harness.mjs";
+import redirect from "../workers/redirect.mjs";
+import { renderWaitingPage, waitingThemes } from "../workers/waiting-page.mjs";
 const h = await harness();
 if (process.argv.includes("--fixtures")) {
   const domain = await (
@@ -15,15 +17,64 @@ if (process.argv.includes("--fixtures")) {
   await h.call("links", "POST", {
     name: "Link de teste local",
     slug: "teste-local",
-    mode: "real",
+    mode: "waiting",
     device: "all",
     real_urls: ["https://example.com/a"],
     waiting_url: "",
+    waiting_page: {
+      theme: "sky",
+      company: "Empresa de demonstração",
+      headline: "Serviços próximos de você.",
+      city: "Salvador / BA",
+      services: ["Atendimento personalizado", "Planejamento e acompanhamento"],
+    },
   });
 }
 const root = resolve("dist");
 createServer(async (req, res) => {
   try {
+    if (req.url.startsWith("/preview/waiting/")) {
+      const theme = req.url.split("/").at(-1);
+      if (!waitingThemes.some((t) => t.id === theme)) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.end(
+        renderWaitingPage({
+          theme,
+          company: "Sua empresa",
+          headline: "Serviços que aproximam você do que importa.",
+          description:
+            "Uma apresentação clara do seu trabalho, com atendimento direto e informações em um só lugar.",
+          about:
+            "Apresente aqui a história da sua empresa e como você ajuda seus clientes.",
+          services: [
+            "Descreva seu primeiro serviço",
+            "Apresente sua segunda especialidade",
+            "Conte como funciona seu atendimento",
+          ],
+          city: "Sua cidade / UF",
+        }),
+      );
+      return;
+    }
+    if (req.url.startsWith("/r/")) {
+      const tasks = [];
+      const response = await redirect.fetch(
+        new Request("https://links.example.com/" + req.url.slice(3), {
+          method: req.method,
+          headers: req.headers,
+        }),
+        h.env,
+        { waitUntil: (p) => tasks.push(p) },
+      );
+      await Promise.allSettled(tasks);
+      res.writeHead(response.status, Object.fromEntries(response.headers));
+      res.end(Buffer.from(await response.arrayBuffer()));
+      return;
+    }
     if (req.url.startsWith("/api/")) {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
@@ -52,6 +103,10 @@ createServer(async (req, res) => {
       return;
     }
     const content = await readFile(file);
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    );
     res.setHeader(
       "Content-Type",
       {

@@ -1,8 +1,8 @@
 import { deviceType, destinationMode } from "./rules.mjs";
-const waiting =
-  '<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Em breve</title><body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#f5f7fa;font:18px system-ui;color:#172033"><main style="text-align:center;padding:32px"><p style="color:#5671e8">●</p><h1>Estamos preparando tudo.</h1><p>Este conteúdo estará disponível em breve.</p></main></body></html>';
+import { renderWaitingPage } from "./waiting-page.mjs";
 export default {
   async fetch(request, env, ctx) {
+    const receivedAt = new Date().toISOString();
     const url = new URL(request.url);
     const headers = {
       "Cache-Control": "no-store",
@@ -62,7 +62,7 @@ export default {
       if (request.method === "GET")
         ctx.waitUntil(
           env.DB.prepare(
-            "INSERT INTO clicks(link_id,hostname,device,destination,country) VALUES(?,?,?,?,?)",
+            "INSERT INTO clicks(link_id,hostname,device,destination,country,created_at) VALUES(?,?,?,?,?,?)",
           )
             .bind(
               link.id,
@@ -70,6 +70,7 @@ export default {
               device,
               mode,
               request.cf?.country || "XX",
+              receivedAt,
             )
             .run()
             .catch((error) =>
@@ -81,14 +82,19 @@ export default {
           status: 302,
           headers: { ...headers, Location: target },
         });
-      return new Response(request.method === "HEAD" ? null : waiting, {
-        headers: {
-          ...headers,
-          "Content-Type": "text/html; charset=utf-8",
-          "Content-Security-Policy":
-            "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+      return new Response(
+        request.method === "HEAD"
+          ? null
+          : renderWaitingPage(JSON.parse(link.waiting_page || "{}"), link.name),
+        {
+          headers: {
+            ...headers,
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Security-Policy":
+              "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+          },
         },
-      });
+      );
     } catch (error) {
       console.error("redirect_failed", error.message);
       return new Response("Serviço temporariamente indisponível", {

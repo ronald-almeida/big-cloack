@@ -11,13 +11,14 @@
     "ADMIN_ORIGIN": "https://aprovabmyksh.com",
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
+    "CLOUDFLARE_ACCOUNT_ID": ""
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "big-cloack",
       "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations",
-    },
-  ],
+      "migrations_dir": "migrations"
+    }
+  ]
 }

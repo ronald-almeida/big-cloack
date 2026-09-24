@@ -1,3 +1,4 @@
+import { validateWaitingPage } from "./waiting-page.mjs";
 export function deviceType(headers) {
   const hint = headers.get("sec-ch-ua-mobile");
   if (hint === "?1") return "mobile";
@@ -58,6 +59,7 @@ export function validateLink(input) {
     device: input.device,
     real_urls,
     waiting_url: httpUrl(input.waiting_url, true),
+    waiting_page: validateWaitingPage(input.waiting_page),
   };
 }
 export function analyticsSince(days, now = Date.now()) {
