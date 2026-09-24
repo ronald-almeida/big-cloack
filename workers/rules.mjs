@@ -60,3 +60,9 @@ export function validateLink(input) {
     waiting_url: httpUrl(input.waiting_url, true),
   };
 }
+export function analyticsSince(days, now = Date.now()) {
+  const start = new Date(now);
+  start.setUTCHours(0, 0, 0, 0);
+  start.setUTCDate(start.getUTCDate() - days + 1);
+  return start.toISOString();
+}

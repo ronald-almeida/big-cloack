@@ -5,11 +5,20 @@ import {
   deviceType,
   destinationMode,
   validateLink,
+  analyticsSince,
 } from "../workers/rules.mjs";
 import redirect from "../workers/redirect.mjs";
 import api from "../workers/api.mjs";
 import { onRequest } from "../functions/[[path]].js";
 test("device matrix and destination validation", () => {
+  assert.equal(
+    analyticsSince(7, Date.parse("2026-09-24T21:00:00Z")),
+    "2026-09-18T00:00:00.000Z",
+  );
+  assert.equal(
+    analyticsSince(30, Date.parse("2026-03-01T03:00:00Z")),
+    "2026-01-31T00:00:00.000Z",
+  );
   for (const mode of ["real", "waiting"])
     for (const setting of ["all", "mobile", "desktop"])
       for (const actual of ["mobile", "desktop"])

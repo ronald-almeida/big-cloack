@@ -1,5 +1,5 @@
 import { authenticate } from "./auth.mjs";
-import { validateLink } from "./rules.mjs";
+import { validateLink, analyticsSince } from "./rules.mjs";
 const json = (data, status = 200) =>
   Response.json(data, {
     status,
@@ -175,7 +175,7 @@ export default {
         const days = [7, 30, 90].includes(Number(u.searchParams.get("days")))
           ? Number(u.searchParams.get("days"))
           : 30;
-        const since = new Date(Date.now() - days * 86400000).toISOString(),
+        const since = analyticsSince(days),
           link = u.searchParams.get("link") || "",
           filter = "created_at>=? AND (?='' OR link_id=?)";
         const q = (sql) => env.DB.prepare(sql).bind(since, link, link);
