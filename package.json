@@ -1,0 +1,32 @@
+{
+  "name": "big-cloack",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build --configLoader native",
+    "test": "node --test tests/*.test.mjs",
+    "deploy:api": "node scripts/preflight.mjs && wrangler deploy -c wrangler.api.jsonc",
+    "deploy:redirect": "node scripts/preflight.mjs && wrangler deploy -c wrangler.redirect.jsonc",
+    "deploy:panel": "node scripts/preflight.mjs && wrangler pages deploy dist --project-name big-cloack-admin",
+    "db:local": "wrangler d1 migrations apply DB --local -c wrangler.api.jsonc"
+  },
+  "dependencies": {
+    "jose": "latest",
+    "lucide-react": "latest",
+    "qrcode": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "prettier": "^3.9.9",
+    "vite": "latest",
+    "wrangler": "latest"
+  }
+}
