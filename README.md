@@ -120,3 +120,74 @@ Hoje, Últimos 7 dias, Últimos 30 dias e Personalizado usam o fuso do navegador
 Tempo desde o primeiro acesso e dias com acessos não representam disponibilidade contínua. Criações e exclusões usam o domínio de cadastro escolhido ao criar o link; acessos usam o hostname visitado. Links continuam disponíveis nos demais domínios ativos.
 
 A migration 0004 preserva acessos existentes e passa a registrar criações e exclusões. Links antigos ficam sem domínio de cadastro. Exclusões anteriores não são recuperadas. Excluir um link mantém registros com nome e slug históricos.
+
+## Classificação de tráfego (analytics)
+
+A migration `0005_bot_analytics.sql` adiciona uma avaliação auditável a cada
+requisição GET ou HEAD para um link existente em domínio verificado. Requisições
+rejeitadas antes da resolução do link (405, domínio/link inexistente e healthcheck)
+não entram nos cliques. HEAD passa a contar como acesso; o filtro `request_method=GET`
+permite comparar com a métrica antiga. Não são visitantes únicos.
+
+- `human`: sinais de navegação consistentes, sem evidência relevante de automação;
+  estimativa, não prova de humanidade.
+- `confirmed_bot`: somente `request.cf.botManagement.verifiedBot` ou `signedAgent`
+  verdadeiros, fornecidos pela Cloudflare. Confirma automação, não a identidade do provider.
+- `probable_bot`: índice de automação >=60, sem verificação Cloudflare.
+- `unknown`: evidência insuficiente. Registros históricos não são reclassificados.
+
+`is_bot` é `true` para bots confirmados/prováveis, `false` para humano e `null`
+para indeterminado. `bot_confidence` é um índice heurístico de automação de 0–100,
+**não uma probabilidade calibrada**; histórico tem `null`. Apenas automação
+verificada recebe 100. `bot_reason` é uma lista de motivos, `bot_provider` sempre
+é atribuição provável. WhatsApp é exibido como **WhatsApp/Meta preview (provável)**,
+inclusive se a automação em si for verificada pela Cloudflare.
+
+O classificador combina assinaturas de crawlers/preview/clientes HTTP, ASN da
+origem como corroboração, headers de navegação/prefetch, organização cloud como
+sinal fraco e até 100 acessos anteriores por IP/domínio nos últimos 60 segundos.
+A consulta de frequência é indexada e limitada, aproximada sob concorrência,
+e não usa contadores globais do isolate. IP compartilhado/NAT, datacenter/proxy,
+falha de JS ou ausência de um header não confirmam bot. Não há lista de proxies
+externa nem fingerprinting ativo. User-Agent pode ser falsificado.
+
+Os dados de Cloudflare vêm de `request.cf`, nunca de headers que declaram score
+ou verificação. Os campos opcionais disponíveis (score, verifiedBot, signedAgent,
+JS detection, corporateProxy, JA3/JA4, detectionIds, categoria, ASN/organização,
+colo, HTTP/TLS) são armazenados em `traffic_signals`, com `null` quando ausentes.
+Nenhum plano pago é obrigatório. Consulte as [variáveis de Bot Management](https://developers.cloudflare.com/bots/reference/bot-management-variables/)
+para disponibilidade; campos do Ruleset Engine não são automaticamente campos Workers.
+O IP vem somente de `CF-Connecting-IP`, assumindo entrada pelo edge Cloudflare;
+`X-Forwarded-For` não é confiável para essa finalidade. Requests de outros Workers
+podem representar subrequests; ASN/IP não verificam identidade sozinhos.
+
+`created_at` registra o instante UTC de recebimento. Os campos solicitados de
+UA, IP, país, ASN, método, referer e CF-Ray ficam no registro. Strings e listas
+são limitadas em tamanho; cookies, Authorization e demais headers não são gravados.
+As APIs continuam protegidas pelo Cloudflare Access. Os novos dados pessoais
+seguem a retenção já existente dos cliques (não há expiração automática).
+
+`GET /api/analytics` e `GET /api/logs` aceitam `classification`, `bot_provider` e
+`request_method`, além de período/link/domínio. Logs devolvem `bot_reason` como
+array, `traffic_signals` como objeto e `is_bot` como boolean/null. Analytics inclui
+`classifications`, `providers`, `summary.automated` e `summary.automated_percent`:
+confirmados + prováveis divididos por **todos os acessos do recorte**, incluindo
+indeterminados. Os contratos estão em `shared/traffic.d.ts`.
+
+A gravação ocorre em `ctx.waitUntil`; falhas de classificação/SQL não alteram a
+resposta. A decisão Real/Espera permanece exclusivamente em `destinationMode`,
+por configuração do link/dispositivo. Nenhum sinal de bot bloqueia, redireciona
+ou troca conteúdo. Eventos bloqueados no edge antes do Worker não são observáveis
+por este classificador. Heurísticas não garantem capturar todos os bots.
+
+### Atualização e validação
+
+Com Node 24+ e dependências instaladas: `npm test` e `npm run build`.
+A suíte aplica todas as migrations em SQLite e verifica falsos positivos, campos
+opcionais, filtros/paginação, métricas, frequência e independência do roteamento.
+
+Na publicação, aplicar primeiro as migrations D1, depois API e redirect Worker,
+e por último o painel. Exemplo de migration: `npx wrangler d1 migrations apply DB
+--remote -c wrangler.api.jsonc` (uma linha). Em rollback, reverter os bundles e
+preservar as colunas aditivas; não apagar dados. Sem a migration, a nova API não
+consegue consultar os campos e a gravação registra `analytics_write_failed`.

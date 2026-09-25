@@ -1,3 +1,5 @@
+import TrafficFilters from "./TrafficFilters.jsx";
+import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import React, { useEffect, useRef, useState } from "react";
 import { RefreshCw, Smartphone, Monitor, Clock3 } from "lucide-react";
 export default function AccessLogs({
@@ -5,6 +7,8 @@ export default function AccessLogs({
   domains = [],
   rangeQuery = "",
   hostname = "",
+  linkFilter = "",
+  trafficFilters = {},
 }) {
   const [filters, setFilters] = useState({
       link: "",
@@ -29,7 +33,10 @@ export default function AccessLogs({
     setError("");
     try {
       const query = new URLSearchParams(rangeQuery);
-      for (const [key, value] of Object.entries(filters))
+      for (const [key, value] of Object.entries({
+        ...filters,
+        ...trafficFilters,
+      }))
         if (value)
           query.set(
             key,
@@ -38,6 +45,7 @@ export default function AccessLogs({
               : value,
           );
       if (hostname) query.set("hostname", hostname);
+      if (linkFilter) query.set("link", linkFilter);
       if (next) query.set("cursor", next);
       const res = await fetch("/api/logs?" + query, { signal });
       if (!res.headers.get("content-type")?.includes("application/json"))
@@ -65,7 +73,16 @@ export default function AccessLogs({
     if (rangeQuery) load(null, controller.signal);
     else setLoading(false);
     return () => controller.abort();
-  }, [filters, reload, rangeQuery, hostname]);
+  }, [
+    filters,
+    reload,
+    rangeQuery,
+    hostname,
+    linkFilter,
+    trafficFilters.classification,
+    trafficFilters.bot_provider,
+    trafficFilters.request_method,
+  ]);
   const change = (key, value) => setFilters({ ...filters, [key]: value });
   return (
     <section className="table-card logs-card">
@@ -86,20 +103,25 @@ export default function AccessLogs({
         </button>
       </div>
       <div className="logs-filters">
-        <label>
-          Link
-          <select
-            value={filters.link}
-            onChange={(e) => change("link", e.target.value)}
-          >
-            <option value="">Todos os links</option>
-            {links.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!Object.keys(trafficFilters).length && (
+          <TrafficFilters filters={filters} onChange={change} />
+        )}
+        {!linkFilter && (
+          <label>
+            Link
+            <select
+              value={filters.link}
+              onChange={(e) => change("link", e.target.value)}
+            >
+              <option value="">Todos os links</option>
+              {links.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           Dispositivo
           <select
@@ -140,8 +162,8 @@ export default function AccessLogs({
         )}
       </div>
       <p className="logs-timezone">
-        Horário local: {timezone}. Registros de abertura (GET); não representam
-        visitantes únicos.
+        Horário local: {timezone}. Requisições GET e HEAD (incluindo previews);
+        não representam visitantes únicos.
       </p>
       {error && (
         <div className="error" role="alert">
@@ -158,6 +180,7 @@ export default function AccessLogs({
               <th>DESTINO</th>
               <th>DOMÍNIO</th>
               <th>PAÍS</th>
+              <th>TRÁFEGO / EVIDÊNCIAS</th>
             </tr>
           </thead>
           <tbody>
@@ -190,6 +213,54 @@ export default function AccessLogs({
                 <td>{item.hostname}</td>
                 <td>
                   {item.country === "XX" ? "Não identificado" : item.country}
+                </td>
+                <td className="traffic-detail">
+                  <b>
+                    {TRAFFIC_CLASSES[item.classification] || "Indeterminado"}
+                  </b>
+                  <small>
+                    {BOT_PROVIDERS[item.bot_provider]} · {item.request_method}
+                  </small>
+                  <details>
+                    <summary>
+                      Confiança de automação:{" "}
+                      {item.bot_confidence == null
+                        ? "não disponível"
+                        : `${item.bot_confidence}/100`}
+                    </summary>
+                    <p>
+                      Índice heurístico, não uma probabilidade. Provider
+                      provável.
+                    </p>
+                    <ul>
+                      {(item.bot_reason || []).map((reason, i) => (
+                        <li key={i}>{reason}</li>
+                      ))}
+                    </ul>
+                    {!item.classifier_version && (
+                      <p>Registro anterior à classificação.</p>
+                    )}
+                    <dl>
+                      {Object.entries({
+                        "User-Agent": item.user_agent,
+                        IP: item.ip,
+                        ASN: item.asn,
+                        Referer: item.referer,
+                        "CF-Ray": item.cf_ray,
+                      }).map(([label, value]) => (
+                        <React.Fragment key={label}>
+                          <dt>{label}</dt>
+                          <dd>{value ?? "Não disponível"}</dd>
+                        </React.Fragment>
+                      ))}
+                    </dl>
+                    <details>
+                      <summary>
+                        Sinais coletados (v{item.classifier_version ?? "—"})
+                      </summary>
+                      <pre>{JSON.stringify(item.traffic_signals, null, 2)}</pre>
+                    </details>
+                  </details>
                 </td>
               </tr>
             ))}

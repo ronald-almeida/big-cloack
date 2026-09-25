@@ -1,3 +1,4 @@
+import { recordTraffic } from "./traffic.mjs";
 import { deviceType, destinationMode } from "./rules.mjs";
 import { renderWaitingPage } from "./waiting-page.mjs";
 export default {
@@ -59,26 +60,17 @@ export default {
         mode === "real" && urls.length
           ? urls[crypto.getRandomValues(new Uint32Array(1))[0] % urls.length]
           : link.waiting_url;
-      if (request.method === "GET")
-        ctx.waitUntil(
-          env.DB.prepare(
-            "INSERT INTO clicks(link_id,hostname,device,destination,country,created_at,link_name,slug) VALUES(?,?,?,?,?,?,?,?)",
-          )
-            .bind(
-              link.id,
-              url.hostname,
-              device,
-              mode,
-              request.cf?.country || "XX",
-              receivedAt,
-              link.name,
-              link.slug,
-            )
-            .run()
-            .catch((error) =>
-              console.error("analytics_write_failed", error.message),
-            ),
-        );
+      ctx.waitUntil(
+        recordTraffic(
+          request,
+          env,
+          link,
+          url.hostname,
+          device,
+          mode,
+          receivedAt,
+        ).catch(() => console.error("analytics_write_failed")),
+      );
       if (target)
         return new Response(null, {
           status: 302,

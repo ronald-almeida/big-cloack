@@ -1,3 +1,5 @@
+import TrafficFilters from "./TrafficFilters.jsx";
+import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import PeriodFilter, { periodQuery } from "./PeriodFilter.jsx";
 import DomainHealth from "./DomainHealth.jsx";
 import DomainsPanel from "./DomainsPanel.jsx";
@@ -52,6 +54,11 @@ function App() {
     [links, setLinks] = useState([]),
     [domains, setDomains] = useState([]),
     [analytics, setAnalytics] = useState(null),
+    [trafficFilters, setTrafficFilters] = useState({
+      classification: "",
+      bot_provider: "",
+      request_method: "",
+    }),
     [periodValue, setPeriodValue] = useState({
       preset: "30",
       from: "",
@@ -129,7 +136,9 @@ function App() {
       const [l, d, a] = await Promise.all([
         api("links"),
         api("domains"),
-        api(`analytics?${rangeQuery}&link=${filter}`),
+        api(
+          `analytics?${rangeQuery}&link=${encodeURIComponent(filter)}&${new URLSearchParams(page === "Analytics" ? trafficFilters : {})}`,
+        ),
       ]);
       if (current !== refreshId.current) return;
       setLinks(l);
@@ -145,7 +154,7 @@ function App() {
   }
   useEffect(() => {
     refresh();
-  }, [rangeQuery, filter]);
+  }, [rangeQuery, filter, trafficFilters, page]);
   useEffect(() => {
     if (!activeDomains.some((d) => d.hostname === selectedDomain))
       setSelectedDomain(activeDomains[0]?.hostname || "");
@@ -571,55 +580,120 @@ function App() {
             </section>
           )}
           {page === "Analytics" && (
-            <div className="analytics-grid">
-              <section className="table-card">
-                <div className="section-heading">
-                  <h2>Dispositivos</h2>
+            <>
+              <section className="table-card padded">
+                <h2>Classificação de tráfego</h2>
+                <div className="logs-filters">
+                  <TrafficFilters
+                    filters={trafficFilters}
+                    onChange={(key, value) =>
+                      setTrafficFilters((previous) => ({
+                        ...previous,
+                        [key]: value,
+                      }))
+                    }
+                  />
                 </div>
-                {[
-                  ["Mobile", summary.mobile],
-                  ["Desktop", summary.total - summary.mobile],
-                ].map(([name, count]) => (
-                  <div className="metric-row" key={name}>
-                    <span>{name}</span>
-                    <b>{count}</b>
-                    <progress value={count} max={summary.total || 1} />
+                <p>
+                  <b>
+                    {summary.automated || 0} acessos automatizados (
+                    {summary.automated_percent || 0}%)
+                  </b>{" "}
+                  de {summary.total} requisições no recorte selecionado.
+                </p>
+                <p className="muted">
+                  Inclui bots confirmados e prováveis; GET e HEAD. Humano é uma
+                  estimativa. Dados antigos permanecem indeterminados. A
+                  classificação não altera o destino.
+                </p>
+              </section>
+              <div className="analytics-grid">
+                <section className="table-card">
+                  <div className="section-heading">
+                    <h2>Classificações</h2>
                   </div>
-                ))}
-              </section>
-              <section className="table-card">
-                <div className="section-heading">
-                  <h2>Países</h2>
-                </div>
-                {analytics?.countries.length ? (
-                  analytics.countries.map((c) => (
-                    <div className="metric-row" key={c.country}>
-                      <span>
-                        {c.country === "XX" ? "Não identificado" : c.country}
-                      </span>
-                      <b>{c.total}</b>
+                  {Object.entries(TRAFFIC_CLASSES).map(([key, label]) => (
+                    <div className="metric-row" key={key}>
+                      <span>{label}</span>
+                      <b>
+                        {analytics?.classifications?.find(
+                          (row) => row.classification === key,
+                        )?.total || 0}
+                      </b>
                     </div>
-                  ))
-                ) : (
-                  <p className="muted padded">Ainda não há dados no período.</p>
-                )}
-              </section>
-              <section className="table-card">
-                <div className="section-heading">
-                  <h2>Domínios</h2>
-                </div>
-                {analytics?.domains.length ? (
-                  analytics.domains.map((d) => (
-                    <div className="metric-row" key={d.hostname}>
-                      <span>{d.hostname}</span>
-                      <b>{d.total}</b>
+                  ))}
+                </section>
+                <section className="table-card">
+                  <div className="section-heading">
+                    <h2>Providers prováveis</h2>
+                  </div>
+                  {analytics?.providers?.map((row) => (
+                    <div className="metric-row" key={row.bot_provider}>
+                      <span>{BOT_PROVIDERS[row.bot_provider]}</span>
+                      <b>{row.total}</b>
                     </div>
-                  ))
-                ) : (
-                  <p className="muted padded">Ainda não há dados no período.</p>
-                )}
-              </section>
-            </div>
+                  ))}
+                </section>
+                <section className="table-card">
+                  <div className="section-heading">
+                    <h2>Dispositivos</h2>
+                  </div>
+                  {[
+                    ["Mobile", summary.mobile],
+                    ["Desktop", summary.total - summary.mobile],
+                  ].map(([name, count]) => (
+                    <div className="metric-row" key={name}>
+                      <span>{name}</span>
+                      <b>{count}</b>
+                      <progress value={count} max={summary.total || 1} />
+                    </div>
+                  ))}
+                </section>
+                <section className="table-card">
+                  <div className="section-heading">
+                    <h2>Países</h2>
+                  </div>
+                  {analytics?.countries.length ? (
+                    analytics.countries.map((c) => (
+                      <div className="metric-row" key={c.country}>
+                        <span>
+                          {c.country === "XX" ? "Não identificado" : c.country}
+                        </span>
+                        <b>{c.total}</b>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="muted padded">
+                      Ainda não há dados no período.
+                    </p>
+                  )}
+                </section>
+                <section className="table-card">
+                  <div className="section-heading">
+                    <h2>Domínios</h2>
+                  </div>
+                  {analytics?.domains.length ? (
+                    analytics.domains.map((d) => (
+                      <div className="metric-row" key={d.hostname}>
+                        <span>{d.hostname}</span>
+                        <b>{d.total}</b>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="muted padded">
+                      Ainda não há dados no período.
+                    </p>
+                  )}
+                </section>
+              </div>
+              <AccessLogs
+                links={links}
+                domains={domains}
+                rangeQuery={rangeQuery}
+                linkFilter={filter}
+                trafficFilters={trafficFilters}
+              />
+            </>
           )}
           {page === "Acessos" && (
             <AccessLogs
@@ -645,7 +719,6 @@ function App() {
               }
             />
           )}
-
         </div>
       </main>
       {editor && (
