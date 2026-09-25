@@ -1,3 +1,4 @@
+import { lookupCnpj } from "./cnpj.mjs";
 import {
   cloudflareConfigured,
   connectDomain,
@@ -57,6 +58,8 @@ export default {
     )
       return json({ error: "Origem não permitida." }, 403);
     try {
+      if (path === "/api/cnpj" && request.method === "GET")
+        return json(await lookupCnpj(u.searchParams.get("cnpj")));
       if (path === "/api/links" && request.method === "GET") {
         const { results } = await env.DB.prepare(
           "SELECT l.*, (SELECT COUNT(*) FROM clicks c WHERE c.link_id=l.id) AS clicks FROM links l ORDER BY created_at DESC LIMIT 1000",

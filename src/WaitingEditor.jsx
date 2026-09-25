@@ -7,6 +7,47 @@ export default function WaitingEditor({
   external,
 }) {
   const [mobile, setMobile] = useState(false);
+  const [cnpjInput, setCnpjInput] = useState(value?.cnpj || ""),
+    [lookup, setLookup] = useState(null),
+    [lookupError, setLookupError] = useState(""),
+    [searching, setSearching] = useState(false),
+    [applied, setApplied] = useState(false);
+  const lookupId = useRef(0);
+  useEffect(
+    () => () => {
+      lookupId.current++;
+    },
+    [],
+  );
+  async function searchCnpj() {
+    const id = ++lookupId.current;
+    setSearching(true);
+    setLookupError("");
+    setLookup(null);
+    setApplied(false);
+    try {
+      const r = await fetch(
+        "/api/cnpj?" + new URLSearchParams({ cnpj: cnpjInput }),
+      );
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || "Consulta indisponível.");
+      if (id === lookupId.current) setLookup(data);
+    } catch (e) {
+      if (id === lookupId.current) setLookupError(e.message);
+    } finally {
+      if (id === lookupId.current) setSearching(false);
+    }
+  }
+  function applyLookup() {
+    const fields = Object.fromEntries(
+      Object.entries(lookup.fields).filter(([, v]) =>
+        Array.isArray(v) ? v.length : Boolean(v),
+      ),
+    );
+    onChange({ ...value, ...fields });
+    setLookup(null);
+    setApplied(true);
+  }
   const canvas = useRef(null),
     [scale, setScale] = useState(0.5);
   useEffect(() => {
@@ -52,6 +93,60 @@ export default function WaitingEditor({
         >
           Variar estilo
         </button>
+      </div>
+      <div className="cnpj-fill">
+        <label htmlFor="cnpj-search">Preencher pelo CNPJ</label>
+        <div className="cnpj-search-row">
+          <input
+            id="cnpj-search"
+            inputMode="numeric"
+            maxLength={18}
+            value={cnpjInput}
+            placeholder="00.000.000/0000-00"
+            onChange={(e) => {
+              setCnpjInput(e.target.value);
+              lookupId.current++;
+              setLookup(null);
+              setSearching(false);
+              setLookupError("");
+              setApplied(false);
+            }}
+          />
+          <button
+            type="button"
+            className="secondary"
+            disabled={searching || !cnpjInput.trim()}
+            onClick={searchCnpj}
+          >
+            {searching ? "Consultando…" : "Buscar CNPJ"}
+          </button>
+        </div>
+        {lookupError && (
+          <p role="alert" className="error">
+            {lookupError}
+          </p>
+        )}
+        {lookup && (
+          <div className="cnpj-result">
+            <strong>{lookup.fields.company}</strong>
+            <p>
+              {lookup.fields.city} · {lookup.status || "Situação não informada"}
+            </p>
+            <small>
+              Fonte: {lookup.source}. Ao aplicar, os campos disponíveis
+              substituem o preenchimento atual. Revise as atividades e os textos
+              antes de salvar. Telefone cadastral não é tratado como WhatsApp.
+            </small>
+            <button type="button" className="primary" onClick={applyLookup}>
+              Aplicar dados da empresa
+            </button>
+          </div>
+        )}
+        {applied && (
+          <p role="status">
+            Dados preenchidos. Revise a página abaixo antes de salvar.
+          </p>
+        )}
       </div>
       {external && (
         <p className="rule-info">

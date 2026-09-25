@@ -1407,4 +1407,36 @@ footer,
   }
 }
 
-@media (max-width: 800px) { nav { margin-top: 18px; overflow-x: auto; } nav button { flex: 0 0 auto; width: auto; white-space: nowrap; } }
+@media (max-width: 800px) {
+  nav {
+    margin-top: 18px;
+    overflow-x: auto;
+  }
+  nav button {
+    flex: 0 0 auto;
+    width: auto;
+    white-space: nowrap;
+  }
+}
+
+.cnpj-fill {
+  margin: 16px 0;
+  padding: 16px;
+  background: #f0f7f2;
+  border: 1px solid #d7e7dc;
+  border-radius: 10px;
+}
+.cnpj-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+.cnpj-result {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.cnpj-result button {
+  justify-self: start;
+}
