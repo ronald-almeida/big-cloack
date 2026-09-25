@@ -1210,3 +1210,5 @@ footer {
     padding: 14px;
   }
 }
+
+.period-filter > select { width: 170px; max-width: 100%; justify-self: start; min-height: 36px; padding: 8px 12px; font-size: 13px; }
