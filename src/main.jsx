@@ -1,5 +1,7 @@
+import PeriodFilter, { periodQuery } from "./PeriodFilter.jsx";
+import DomainHealth from "./DomainHealth.jsx";
 import DomainsPanel from "./DomainsPanel.jsx";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import {
   LayoutDashboard,
@@ -50,7 +52,11 @@ function App() {
     [links, setLinks] = useState([]),
     [domains, setDomains] = useState([]),
     [analytics, setAnalytics] = useState(null),
-    [days, setDays] = useState(30),
+    [periodValue, setPeriodValue] = useState({
+      preset: "30",
+      from: "",
+      to: "",
+    }),
     [filter, setFilter] = useState(""),
     [search, setSearch] = useState(""),
     [editor, setEditor] = useState(null),
@@ -62,6 +68,14 @@ function App() {
     [busy, setBusy] = useState(false),
     [qr, setQr] = useState(null),
     [confirm, setConfirm] = useState(null);
+  const rangeQuery = periodQuery(periodValue);
+  const refreshId = useRef(0);
+  const chartStart = analytics
+    ? Math.floor(Date.parse(analytics.from) / 86400000) * 86400000
+    : 0;
+  const days = analytics
+    ? Math.floor((Date.parse(analytics.to) - 1 - chartStart) / 86400000) + 1
+    : 30;
   const activeDomains = domains.filter((d) => d.verified);
   const modalOpen = Boolean(editor || qr || confirm);
   useEffect(() => {
@@ -104,26 +118,34 @@ function App() {
     };
   }, [modalOpen]);
   async function refresh() {
+    const current = ++refreshId.current;
+    if (!rangeQuery) {
+      setAnalytics(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [l, d, a] = await Promise.all([
         api("links"),
         api("domains"),
-        api(`analytics?days=${days}&link=${filter}`),
+        api(`analytics?${rangeQuery}&link=${filter}`),
       ]);
+      if (current !== refreshId.current) return;
       setLinks(l);
       setDomains(d);
       setAnalytics(a);
       setError("");
     } catch (e) {
+      if (current !== refreshId.current) return;
       setError(e.message);
     } finally {
-      setLoading(false);
+      if (current === refreshId.current) setLoading(false);
     }
   }
   useEffect(() => {
     refresh();
-  }, [days, filter]);
+  }, [rangeQuery, filter]);
   useEffect(() => {
     if (!activeDomains.some((d) => d.hostname === selectedDomain))
       setSelectedDomain(activeDomains[0]?.hostname || "");
@@ -147,7 +169,12 @@ function App() {
     }
   }
   function edit(l = empty) {
-    setEditor({ ...l });
+    setEditor({
+      ...l,
+      domain_id: l.id
+        ? l.domain_id
+        : domains.find((d) => d.hostname === selectedDomain)?.id || "",
+    });
     setUrls(l.real_urls.join("\n"));
     setError("");
   }
@@ -271,6 +298,7 @@ function App() {
               </button>
             )}
           </div>
+          <PeriodFilter value={periodValue} onChange={setPeriodValue} />
           {error && (
             <div role="alert" className="error">
               {error}
@@ -293,15 +321,6 @@ function App() {
                     ? "Contadores gerais"
                     : "Resumo de desempenho"}
                 </span>
-                <select
-                  aria-label="Período"
-                  value={days}
-                  onChange={(e) => setDays(Number(e.target.value))}
-                >
-                  <option value={7}>Últimos 7 dias</option>
-                  <option value={30}>Últimos 30 dias</option>
-                  <option value={90}>Últimos 90 dias</option>
-                </select>
               </div>
               <div className="stats">
                 {[
@@ -373,9 +392,7 @@ function App() {
               <div className="chart">
                 {summary.total ? (
                   Array.from({ length: days }, (_, i) => {
-                    const date = new Date(
-                        Date.now() - (days - 1 - i) * 86400000,
-                      )
+                    const date = new Date(chartStart + i * 86400000)
                         .toISOString()
                         .slice(0, 10),
                       count =
@@ -608,7 +625,20 @@ function App() {
               </section>
             </div>
           )}
-          {page === "Acessos" && <AccessLogs links={links} />}
+          {page === "Acessos" && (
+            <AccessLogs
+              links={links}
+              domains={domains}
+              rangeQuery={rangeQuery}
+            />
+          )}
+          {page === "Domínios" && (
+            <DomainHealth
+              links={links}
+              domains={domains}
+              rangeQuery={rangeQuery}
+            />
+          )}
           {page === "Domínios" && (
             <DomainsPanel
               domains={domains}
@@ -663,6 +693,27 @@ function App() {
                 });
               }}
             >
+              <label>
+                Domínio de cadastro
+                <select
+                  disabled={Boolean(editor.id)}
+                  value={editor.domain_id || ""}
+                  onChange={(e) =>
+                    setEditor({ ...editor, domain_id: e.target.value })
+                  }
+                >
+                  <option value="">Sem domínio atribuído</option>
+                  {domains.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.hostname}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  Usado nas métricas de criação e exclusão. O link continua
+                  disponível nos demais domínios ativos.
+                </small>
+              </label>
               <label>
                 Nome do link
                 <input
@@ -808,7 +859,7 @@ function App() {
             <h2>Excluir {confirm.name}?</h2>
             <p>
               {confirm.type === "links"
-                ? "O link e seu histórico de acessos serão excluídos."
+                ? "O link deixará de funcionar. O histórico de acessos e a contagem de exclusão serão preservados."
                 : "Os redirects neste domínio deixarão de funcionar. A configuração na Cloudflare não será removida."}
             </p>
             {error && <p className="form-error">{error}</p>}

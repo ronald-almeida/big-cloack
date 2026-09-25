@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import { RefreshCw, Smartphone, Monitor, Clock3 } from "lucide-react";
-export default function AccessLogs({ links }) {
+export default function AccessLogs({
+  links,
+  domains = [],
+  rangeQuery = "",
+  hostname = "",
+}) {
   const [filters, setFilters] = useState({
       link: "",
       device: "",
       destination: "",
-      from: "",
-      to: "",
+      hostname: "",
     }),
     [items, setItems] = useState([]),
     [cursor, setCursor] = useState(null),
@@ -24,7 +28,7 @@ export default function AccessLogs({ links }) {
     setLoading(true);
     setError("");
     try {
-      const query = new URLSearchParams();
+      const query = new URLSearchParams(rangeQuery);
       for (const [key, value] of Object.entries(filters))
         if (value)
           query.set(
@@ -33,6 +37,7 @@ export default function AccessLogs({ links }) {
               ? new Date(value).toISOString()
               : value,
           );
+      if (hostname) query.set("hostname", hostname);
       if (next) query.set("cursor", next);
       const res = await fetch("/api/logs?" + query, { signal });
       if (!res.headers.get("content-type")?.includes("application/json"))
@@ -57,9 +62,10 @@ export default function AccessLogs({ links }) {
     request.current = controller;
     setItems([]);
     setCursor(null);
-    load(null, controller.signal);
+    if (rangeQuery) load(null, controller.signal);
+    else setLoading(false);
     return () => controller.abort();
-  }, [filters, reload]);
+  }, [filters, reload, rangeQuery, hostname]);
   const change = (key, value) => setFilters({ ...filters, [key]: value });
   return (
     <section className="table-card logs-card">
@@ -116,22 +122,22 @@ export default function AccessLogs({ links }) {
             <option value="waiting">Espera</option>
           </select>
         </label>
-        <label>
-          De
-          <input
-            type="datetime-local"
-            value={filters.from}
-            onChange={(e) => change("from", e.target.value)}
-          />
-        </label>
-        <label>
-          Até (exclusivo)
-          <input
-            type="datetime-local"
-            value={filters.to}
-            onChange={(e) => change("to", e.target.value)}
-          />
-        </label>
+        {!hostname && (
+          <label>
+            Domínio
+            <select
+              value={filters.hostname}
+              onChange={(e) => change("hostname", e.target.value)}
+            >
+              <option value="">Todos os domínios</option>
+              {domains.map((d) => (
+                <option key={d.id} value={d.hostname}>
+                  {d.hostname}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       <p className="logs-timezone">
         Horário local: {timezone}. Registros de abertura (GET); não representam

@@ -209,7 +209,7 @@ test("authenticated CRUD, redirects, analytics, cache invalidation and security"
     await Promise.all(pending);
     assert.equal((await h.call("links/" + link.id, "DELETE")).status, 200);
     assert.equal((await visit()).status, 404);
-    assert.equal((await (await h.call("analytics")).json()).summary.total, 0);
+    assert.equal((await (await h.call("analytics")).json()).summary.total, 4);
     assert.equal((await h.call("domains/" + domain.id, "DELETE")).status, 200);
   } finally {
     h.close();

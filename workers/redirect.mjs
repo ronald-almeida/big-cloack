@@ -62,7 +62,7 @@ export default {
       if (request.method === "GET")
         ctx.waitUntil(
           env.DB.prepare(
-            "INSERT INTO clicks(link_id,hostname,device,destination,country,created_at) VALUES(?,?,?,?,?,?)",
+            "INSERT INTO clicks(link_id,hostname,device,destination,country,created_at,link_name,slug) VALUES(?,?,?,?,?,?,?,?)",
           )
             .bind(
               link.id,
@@ -71,6 +71,8 @@ export default {
               mode,
               request.cf?.country || "XX",
               receivedAt,
+              link.name,
+              link.slug,
             )
             .run()
             .catch((error) =>

@@ -3,8 +3,9 @@ import {
   connectDomain,
   verifyDomain,
 } from "./domain-connect.mjs";
+import { period } from "./period.mjs";
 import { authenticate } from "./auth.mjs";
-import { validateLink, analyticsSince } from "./rules.mjs";
+import { validateLink } from "./rules.mjs";
 const json = (data, status = 200) =>
   Response.json(data, {
     status,
@@ -69,10 +70,19 @@ export default {
         );
       }
       if (path === "/api/links" && request.method === "POST") {
-        const l = validateLink(await body(request)),
+        const input = await body(request),
+          l = validateLink(input),
           id = crypto.randomUUID();
+        const domainId = input.domain_id || null;
+        if (
+          domainId &&
+          !(await env.DB.prepare("SELECT id FROM domains WHERE id=?")
+            .bind(domainId)
+            .first())
+        )
+          throw new Error("Domínio de cadastro inválido.");
         await env.DB.prepare(
-          "INSERT INTO links(id,slug,name,mode,device,real_urls,waiting_url,waiting_page,version) VALUES(?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO links(id,slug,name,mode,device,real_urls,waiting_url,waiting_page,version,domain_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
         )
           .bind(
             id,
@@ -84,9 +94,10 @@ export default {
             l.waiting_url,
             JSON.stringify(l.waiting_page),
             crypto.randomUUID(),
+            domainId,
           )
           .run();
-        return json({ id, ...l }, 201);
+        return json({ id, ...l, domain_id: domainId }, 201);
       }
       const match = path.match(/^\/api\/links\/([a-f0-9-]+)$/);
       if (match && request.method === "PUT") {
@@ -175,6 +186,11 @@ export default {
       if (path === "/api/logs" && request.method === "GET") {
         const conditions = [],
           params = [];
+        const hostname = u.searchParams.get("hostname");
+        if (hostname) {
+          conditions.push("c.hostname=?");
+          params.push(hostname);
+        }
         const link = u.searchParams.get("link"),
           device = u.searchParams.get("device"),
           destination = u.searchParams.get("destination"),
@@ -226,7 +242,7 @@ export default {
         )
           throw new Error("O início deve ser anterior ao fim do período.");
         const { results } = await env.DB.prepare(
-          `SELECT c.id,c.created_at,c.hostname,c.device,c.destination,c.country,c.link_id,l.name AS link_name,l.slug FROM clicks c JOIN links l ON l.id=c.link_id ${conditions.length ? "WHERE " + conditions.join(" AND ") : ""} ORDER BY c.id DESC LIMIT 51`,
+          `SELECT c.id,c.created_at,c.hostname,c.device,c.destination,c.country,c.link_id,COALESCE(NULLIF(c.link_name,''),l.name,'Link excluído') AS link_name,COALESCE(NULLIF(c.slug,''),l.slug,'') AS slug FROM clicks c LEFT JOIN links l ON l.id=c.link_id ${conditions.length ? "WHERE " + conditions.join(" AND ") : ""} ORDER BY c.id DESC LIMIT 51`,
         )
           .bind(...params)
           .all();
@@ -236,14 +252,40 @@ export default {
           next_cursor: results.length > 50 ? String(items.at(-1).id) : null,
         });
       }
+      if (path === "/api/domain-health" && request.method === "GET") {
+        const range = period(u.searchParams);
+        const { results } = await env.DB.prepare(
+          `SELECT d.*,
+          (SELECT COUNT(*) FROM links l WHERE l.domain_id=d.id) AS current_links,
+          (SELECT COUNT(*) FROM link_events e WHERE e.domain_id=d.id AND e.event='created' AND e.created_at>=? AND e.created_at<?) AS created_links,
+          (SELECT COUNT(*) FROM link_events e WHERE e.domain_id=d.id AND e.event='deleted' AND e.created_at>=? AND e.created_at<?) AS deleted_links,
+          (SELECT COUNT(*) FROM clicks c WHERE c.hostname=d.hostname AND c.created_at>=? AND c.created_at<?) AS accesses,
+          (SELECT MIN(created_at) FROM clicks c WHERE c.hostname=d.hostname) AS first_access,
+          (SELECT MAX(created_at) FROM clicks c WHERE c.hostname=d.hostname) AS last_access,
+          (SELECT COUNT(DISTINCT substr(created_at,1,10)) FROM clicks c WHERE c.hostname=d.hostname) AS used_days
+          FROM domains d ORDER BY d.created_at DESC`,
+        )
+          .bind(
+            range.from,
+            range.to,
+            range.from,
+            range.to,
+            range.from,
+            range.to,
+          )
+          .all();
+        return json({ items: results, ...range });
+      }
       if (path === "/api/analytics" && request.method === "GET") {
-        const days = [7, 30, 90].includes(Number(u.searchParams.get("days")))
-          ? Number(u.searchParams.get("days"))
-          : 30;
-        const since = analyticsSince(days),
+        const range = period(u.searchParams);
+        const days = Math.ceil(
+          (Date.parse(range.to) - Date.parse(range.from)) / 86400000,
+        );
+        const since = range.from,
           link = u.searchParams.get("link") || "",
-          filter = "created_at>=? AND (?='' OR link_id=?)";
-        const q = (sql) => env.DB.prepare(sql).bind(since, link, link);
+          filter = "created_at>=? AND created_at<? AND (?='' OR link_id=?)";
+        const q = (sql) =>
+          env.DB.prepare(sql).bind(since, range.to, link, link);
         const results = await env.DB.batch([
           q(
             `SELECT COUNT(*) total,COALESCE(SUM(destination='real'),0) real,COALESCE(SUM(destination='waiting'),0) waiting,COALESCE(SUM(device='mobile'),0) mobile FROM clicks WHERE ${filter}`,
@@ -264,6 +306,7 @@ export default {
           countries: results[2].results,
           domains: results[3].results,
           days,
+          ...range,
         });
       }
       return json({ error: "Rota não encontrada." }, 404);

@@ -99,7 +99,7 @@ domínio de redirect → Redirect Worker → D1 (domínio + versão atual)
 
 D1 é a fonte de verdade para existência e versão dos links. O cache usa chaves imutáveis com versão e expiração de uma hora; uma edição ou exclusão não depende da propagação de invalidações KV. Não há cache HTTP dos redirects.
 
-Os registros de analytics são assíncronos via `waitUntil`; falhas são registradas em logs e podem causar subcontagem. Não são métricas de faturamento. Excluir um link também exclui seus eventos. A listagem inicial mostra até 1.000 links; volumes maiores exigem paginação. O histórico permanece no D1 até exclusão do link; avaliar retenção conforme o uso. URLs de destino aceitam apenas HTTP/HTTPS sem credenciais. Parâmetros recebidos não são copiados automaticamente ao destino.
+Os registros de analytics são assíncronos via `waitUntil`; falhas são registradas em logs e podem causar subcontagem. Não são métricas de faturamento. Excluir um link preserva seus acessos e registra a exclusão. A listagem inicial mostra até 1.000 links; volumes maiores exigem paginação. O histórico permanece no D1; avaliar retenção conforme o uso. URLs de destino aceitam apenas HTTP/HTTPS sem credenciais. Parâmetros recebidos não são copiados automaticamente ao destino.
 
 ## Estrutura
 
@@ -112,3 +112,11 @@ Os registros de analytics são assíncronos via `waitUntil`; falhas são registr
 - `.github/workflows/verify.yml`: build, testes e dry-run dos bundles em Linux.
 
 Após alterar os bindings, gere os tipos com `pnpm exec wrangler types -c wrangler.api.jsonc` e o equivalente para o redirector. Antes de divulgar o painel, conclua a ativação DNS e valide o login real e as operações autenticadas em produção.
+
+## Saúde dos domínios e períodos
+
+Hoje, Últimos 7 dias, Últimos 30 dias e Personalizado usam o fuso do navegador, incluindo o dia final. Os agrupamentos diários usam UTC.
+
+Tempo desde o primeiro acesso e dias com acessos não representam disponibilidade contínua. Criações e exclusões usam o domínio de cadastro escolhido ao criar o link; acessos usam o hostname visitado. Links continuam disponíveis nos demais domínios ativos.
+
+A migration 0004 preserva acessos existentes e passa a registrar criações e exclusões. Links antigos ficam sem domínio de cadastro. Exclusões anteriores não são recuperadas. Excluir um link mantém registros com nome e slug históricos.
