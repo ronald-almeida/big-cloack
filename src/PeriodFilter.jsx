@@ -54,7 +54,7 @@ export default function PeriodFilter({ value, onChange }) {
             <input
               type="date"
               value={value.from}
-              onChange={(e) => onChange({ ...value, from: e.target.value })}
+              onInput={(e) => onChange({ ...value, from: e.target.value })}
             />
           </label>
           <label>
@@ -62,7 +62,7 @@ export default function PeriodFilter({ value, onChange }) {
             <input
               type="date"
               value={value.to}
-              onChange={(e) => onChange({ ...value, to: e.target.value })}
+              onInput={(e) => onChange({ ...value, to: e.target.value })}
             />
           </label>
           <small>Inclui a data final. Até 366 dias.</small>
