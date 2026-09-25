@@ -1440,3 +1440,44 @@ footer,
 .cnpj-result button {
   justify-self: start;
 }
+
+.traffic-detail {
+  min-width: 260px;
+  max-width: 480px;
+  white-space: normal;
+}
+.traffic-detail summary {
+  cursor: pointer;
+  margin: 8px 0;
+}
+.traffic-detail p,
+.traffic-detail li,
+.traffic-detail dd {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.traffic-detail ul {
+  padding-left: 18px;
+}
+.traffic-detail dt {
+  font-weight: 600;
+  margin-top: 8px;
+}
+.traffic-detail dd {
+  margin: 0;
+}
+.traffic-detail pre {
+  max-width: 420px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.logs-filters {
+  flex-wrap: wrap;
+}
+.logs-card td {
+  vertical-align: top;
+}
+.traffic-detail pre {
+  max-height: 280px;
+  overflow: auto;
+}

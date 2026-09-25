@@ -189,10 +189,10 @@ test("authenticated CRUD, redirects, analytics, cache invalidation and security"
     await Promise.all(pending);
     pending.length = 0;
     let metrics = await (await h.call("analytics")).json();
-    assert.equal(metrics.summary.total, 3);
-    assert.equal(metrics.summary.real, 1);
+    assert.equal(metrics.summary.total, 4);
+    assert.equal(metrics.summary.real, 2);
     assert.equal(metrics.summary.waiting, 2);
-    assert.equal(metrics.summary.mobile, 1);
+    assert.equal(metrics.summary.mobile, 2);
     assert.equal(
       (
         await h.call("links/" + link.id, "PUT", {
@@ -209,7 +209,7 @@ test("authenticated CRUD, redirects, analytics, cache invalidation and security"
     await Promise.all(pending);
     assert.equal((await h.call("links/" + link.id, "DELETE")).status, 200);
     assert.equal((await visit()).status, 404);
-    assert.equal((await (await h.call("analytics")).json()).summary.total, 4);
+    assert.equal((await (await h.call("analytics")).json()).summary.total, 5);
     assert.equal((await h.call("domains/" + domain.id, "DELETE")).status, 200);
   } finally {
     h.close();

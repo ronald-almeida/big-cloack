@@ -1,3 +1,4 @@
+import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import { lookupCnpj } from "./cnpj.mjs";
 import {
   cloudflareConfigured,
@@ -39,6 +40,28 @@ async function body(request) {
     offset += chunk.length;
   }
   return JSON.parse(new TextDecoder().decode(bytes));
+}
+function trafficFilters(search, conditions, params, prefix = "") {
+  for (const [key, allowed] of [
+    ["classification", Object.keys(TRAFFIC_CLASSES)],
+    ["bot_provider", Object.keys(BOT_PROVIDERS)],
+    ["request_method", ["GET", "HEAD"]],
+  ]) {
+    const value = search.get(key);
+    if (!value) continue;
+    if (!allowed.includes(value))
+      throw new Error("Filtro de tráfego inválido.");
+    conditions.push(`${prefix}${key}=?`);
+    params.push(value);
+  }
+}
+function decodeTraffic(row) {
+  return {
+    ...row,
+    is_bot: row.is_bot === null ? null : Boolean(row.is_bot),
+    bot_reason: JSON.parse(row.bot_reason),
+    traffic_signals: JSON.parse(row.traffic_signals),
+  };
 }
 export default {
   async fetch(request, env) {
@@ -189,6 +212,7 @@ export default {
       if (path === "/api/logs" && request.method === "GET") {
         const conditions = [],
           params = [];
+        trafficFilters(u.searchParams, conditions, params, "c.");
         const hostname = u.searchParams.get("hostname");
         if (hostname) {
           conditions.push("c.hostname=?");
@@ -245,11 +269,11 @@ export default {
         )
           throw new Error("O início deve ser anterior ao fim do período.");
         const { results } = await env.DB.prepare(
-          `SELECT c.id,c.created_at,c.hostname,c.device,c.destination,c.country,c.link_id,COALESCE(NULLIF(c.link_name,''),l.name,'Link excluído') AS link_name,COALESCE(NULLIF(c.slug,''),l.slug,'') AS slug FROM clicks c LEFT JOIN links l ON l.id=c.link_id ${conditions.length ? "WHERE " + conditions.join(" AND ") : ""} ORDER BY c.id DESC LIMIT 51`,
+          `SELECT c.*,COALESCE(NULLIF(c.link_name,''),l.name,'Link excluído') AS link_name,COALESCE(NULLIF(c.slug,''),l.slug,'') AS slug FROM clicks c LEFT JOIN links l ON l.id=c.link_id ${conditions.length ? "WHERE " + conditions.join(" AND ") : ""} ORDER BY c.id DESC LIMIT 51`,
         )
           .bind(...params)
           .all();
-        const items = results.slice(0, 50);
+        const items = results.slice(0, 50).map(decodeTraffic);
         return json({
           items,
           next_cursor: results.length > 50 ? String(items.at(-1).id) : null,
@@ -284,14 +308,24 @@ export default {
         const days = Math.ceil(
           (Date.parse(range.to) - Date.parse(range.from)) / 86400000,
         );
-        const since = range.from,
-          link = u.searchParams.get("link") || "",
-          filter = "created_at>=? AND created_at<? AND (?='' OR link_id=?)";
-        const q = (sql) =>
-          env.DB.prepare(sql).bind(since, range.to, link, link);
+        const conditions = ["created_at>=?", "created_at<?"],
+          params = [range.from, range.to];
+        for (const [query, column] of [
+          ["link", "link_id"],
+          ["hostname", "hostname"],
+        ]) {
+          const value = u.searchParams.get(query);
+          if (value) {
+            conditions.push(`${column}=?`);
+            params.push(value);
+          }
+        }
+        trafficFilters(u.searchParams, conditions, params);
+        const filter = conditions.join(" AND ");
+        const q = (sql) => env.DB.prepare(sql).bind(...params);
         const results = await env.DB.batch([
           q(
-            `SELECT COUNT(*) total,COALESCE(SUM(destination='real'),0) real,COALESCE(SUM(destination='waiting'),0) waiting,COALESCE(SUM(device='mobile'),0) mobile FROM clicks WHERE ${filter}`,
+            `SELECT COUNT(*) total,COALESCE(SUM(is_bot=1),0) automated,COALESCE(SUM(destination='real'),0) real,COALESCE(SUM(destination='waiting'),0) waiting,COALESCE(SUM(device='mobile'),0) mobile FROM clicks WHERE ${filter}`,
           ),
           q(
             `SELECT substr(created_at,1,10) day,COUNT(*) total FROM clicks WHERE ${filter} GROUP BY day ORDER BY day`,
@@ -302,9 +336,21 @@ export default {
           q(
             `SELECT hostname,COUNT(*) total FROM clicks WHERE ${filter} GROUP BY hostname ORDER BY total DESC LIMIT 10`,
           ),
+          q(
+            `SELECT classification,COUNT(*) total FROM clicks WHERE ${filter} GROUP BY classification`,
+          ),
+          q(
+            `SELECT bot_provider,COUNT(*) total FROM clicks WHERE ${filter} GROUP BY bot_provider ORDER BY total DESC`,
+          ),
         ]);
+        const summary = results[0].results[0];
+        summary.automated_percent = summary.total
+          ? Math.round((summary.automated / summary.total) * 10000) / 100
+          : 0;
         return json({
-          summary: results[0].results[0],
+          summary,
+          classifications: results[4].results,
+          providers: results[5].results,
           daily: results[1].results,
           countries: results[2].results,
           domains: results[3].results,
