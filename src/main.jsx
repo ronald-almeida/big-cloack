@@ -223,22 +223,37 @@ function App() {
       <aside>
         <div className="brand">
           <span className="brand-icon">
-            <Link size={22} />
+            <svg
+              viewBox="0 0 32 32"
+              width="28"
+              height="28"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M10 7h8a6 6 0 0 1 0 12h-4"
+                stroke="currentColor"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+              />
+              <path
+                d="M22 25h-8a6 6 0 0 1 0-12h4"
+                stroke="currentColor"
+                strokeWidth="3.5"
+                strokeLinecap="round"
+              />
+            </svg>
           </span>
-          big cloak<span className="brand-dot">.</span>
+          <span>
+            bigcloak<span className="brand-dot">.</span>
+          </span>
         </div>
-        <div className="workspace">
-          <span className="avatar">R</span>
-          <div>
-            Meu workspace<small>Administrador</small>
-          </div>
-          <ChevronRight size={16} />
-        </div>
-        <p className="nav-label">WORKSPACE</p>
+
         <nav>
           {nav.map(([name, Icon]) => (
             <button
               key={name}
+              aria-current={page === name ? "page" : undefined}
               className={page === name ? "active" : ""}
               onClick={() => {
                 setPage(name);
@@ -253,12 +268,6 @@ function App() {
             </button>
           ))}
         </nav>
-        <div className="aside-bottom">
-          <Shield size={20} />
-          <div>
-            Acesso protegido<small>Cloudflare Access</small>
-          </div>
-        </div>
         <div className="profile">
           <span className="avatar small">RA</span>
           <div>
@@ -267,19 +276,9 @@ function App() {
         </div>
       </aside>
       <main>
-        <header>
-          <div className="breadcrumb">
-            Workspace <ChevronRight size={14} /> <b>{page}</b>
-          </div>
-          <span className="platform">
-            <span />
-            Cloudflare nativo
-          </span>
-        </header>
         <div className="content">
           <div className="page-heading">
             <div>
-              <p className="eyebrow">SEU CONTROLE, EM UM SÓ LUGAR</p>
               <h1>{page}</h1>
               <p>
                 {page === "Acessos"
@@ -568,10 +567,7 @@ function App() {
                   )}
                 </div>
               )}
-              <footer>
-                {links.length} links cadastrados{" "}
-                <span>Regras explícitas por modo e dispositivo</span>
-              </footer>
+              <footer>{links.length} links cadastrados </footer>
             </section>
           )}
           {page === "Analytics" && (
@@ -649,9 +645,7 @@ function App() {
               }
             />
           )}
-          <div className="page-foot">
-            Big Cloak <span>Workers · D1 · KV · Pages</span>
-          </div>
+
         </div>
       </main>
       {editor && (

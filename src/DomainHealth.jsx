@@ -41,12 +41,15 @@ export default function DomainHealth({ links, domains, rangeQuery }) {
           <p>Criações, exclusões e acessos no período selecionado.</p>
         </div>
       </div>
-      <p className="logs-timezone">
-        O tempo de uso começa no primeiro acesso registrado. Dias com acessos
-        são contados em UTC; não medem disponibilidade contínua. Criações e
-        exclusões usam o domínio de cadastro e passam a ser registradas nesta
-        atualização.
-      </p>
+      <details className="metric-help">
+        <summary>Como as métricas são calculadas</summary>
+        <p className="logs-timezone">
+          O tempo de uso começa no primeiro acesso registrado. Dias com acessos
+          são contados em UTC; não medem disponibilidade contínua. Criações e
+          exclusões usam o domínio de cadastro e passam a ser registradas nesta
+          atualização.
+        </p>
+      </details>
       {error && (
         <p role="alert" className="error">
           {error}

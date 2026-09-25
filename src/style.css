@@ -1,7 +1,7 @@
 :root {
   font-family: "DM Sans", system-ui, sans-serif;
-  color: #202b40;
-  background: #f6f8fb;
+  color: #1c3029;
+  background: #f5f7f5;
   font-synthesis: none;
   font-size: 14px;
 }
@@ -70,7 +70,7 @@ p {
 aside {
   width: 238px;
   flex-shrink: 0;
-  background: #131b2b;
+  background: #102a23;
   color: #a4afc2;
   padding: 32px 20px 20px;
   display: flex;
@@ -89,7 +89,7 @@ aside {
   padding: 0 8px;
 }
 .brand-icon {
-  background: #6077ef;
+  background: #21a775;
   border-radius: 10px;
   width: 35px;
   height: 35px;
@@ -97,7 +97,7 @@ aside {
   place-items: center;
 }
 .brand-dot {
-  color: #7289ff;
+  color: #73e0ac;
   margin-left: -10px;
 }
 .workspace {
@@ -148,11 +148,11 @@ nav button {
   font-size: 13px;
 }
 nav button.active {
-  background: #27334d;
-  color: #c5d0ff;
+  background: #193e32;
+  color: #c2f3d9;
 }
 nav button:hover {
-  background: #202b40;
+  background: #1c3029;
 }
 .nav-count {
   margin-left: auto;
@@ -265,12 +265,12 @@ header {
   white-space: nowrap;
 }
 .primary {
-  background: #5973e8;
+  background: #147d59;
   color: white;
   box-shadow: 0 3px 5px #4562d51a;
 }
 .primary:hover {
-  background: #4662d4;
+  background: #0d6345;
 }
 .secondary {
   background: #fff;
@@ -322,8 +322,8 @@ select {
   font-size: 12px;
 }
 .stat > div > span {
-  background: #f0f3fc;
-  color: #8394d7;
+  background: #eaf4ee;
+  color: #368364;
   width: 30px;
   height: 30px;
   display: grid;
@@ -370,7 +370,7 @@ select {
 .legend i {
   width: 7px;
   height: 7px;
-  background: #677ef0;
+  background: #428d68;
   border-radius: 50%;
 }
 .chart {
@@ -419,7 +419,7 @@ select {
 }
 .bar {
   width: 70%;
-  background: #7088ed;
+  background: #428d68;
   border-radius: 3px 3px 0 0;
 }
 .bar-column small {
@@ -521,7 +521,7 @@ td small {
 }
 .actions button:hover {
   background: #f0f3fa;
-  color: #5571e0;
+  color: #147d59;
 }
 .empty {
   display: flex;
@@ -535,8 +535,8 @@ td small {
 .empty-icon {
   display: grid;
   place-items: center;
-  background: #f0f3fd;
-  color: #7e92db;
+  background: #eaf4ee;
+  color: #368364;
   width: 51px;
   height: 51px;
   border-radius: 13px;
@@ -585,7 +585,7 @@ footer {
 }
 .metric-row progress {
   width: 30%;
-  accent-color: #647ded;
+  accent-color: #147d59;
   height: 7px;
 }
 .domain-add {
@@ -619,7 +619,7 @@ footer {
   padding: 22px 25px;
 }
 .domain-row > svg {
-  color: #8e9dcc;
+  color: #428d68;
 }
 .domain-row > div {
   flex: 1;
@@ -637,7 +637,7 @@ footer {
   padding: 24px;
   background: #edf1fb;
   border-radius: 9px;
-  color: #6379b7;
+  color: #428d68;
 }
 .help b {
   font-size: 12px;
@@ -722,7 +722,7 @@ footer {
   background: #f1f4fc;
   border-radius: 6px;
   margin-bottom: 18px;
-  color: #7083b2;
+  color: #428d68;
 }
 .modal-actions {
   display: flex;
@@ -958,9 +958,9 @@ footer {
   font-size: 11px;
 }
 .theme-options button[aria-pressed="true"] {
-  background: #edf1ff;
-  border-color: #6b80dc;
-  color: #3f58b0;
+  background: #eaf4ee;
+  border-color: #147d59;
+  color: #0d6345;
 }
 .theme-options span {
   width: 13px;
@@ -1211,4 +1211,200 @@ footer {
   }
 }
 
-.period-filter > select { width: 170px; max-width: 100%; justify-self: start; min-height: 36px; padding: 8px 12px; font-size: 13px; }
+.period-filter > select {
+  width: 170px;
+  max-width: 100%;
+  justify-self: start;
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+/* Calm green workspace */
+:root {
+  color-scheme: light;
+  --accent: #147d59;
+  --ink: #1c3029;
+}
+body {
+  background: #f5f7f5;
+}
+button,
+input,
+select,
+textarea {
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+:focus-visible {
+  outline: 2px solid #147d59;
+  outline-offset: 3px;
+}
+aside {
+  padding-top: 36px;
+  border-right: 1px solid #16392d;
+}
+.brand {
+  gap: 11px;
+  font-size: 25px;
+  letter-spacing: -1.1px;
+}
+.brand-icon {
+  width: 39px;
+  height: 39px;
+  border-radius: 13px;
+  background: #b2f0ce;
+  color: #124931;
+}
+.brand-dot {
+  margin-left: 0;
+  color: #73e0ac;
+}
+nav {
+  margin-top: 46px;
+}
+nav button {
+  border-radius: 10px;
+  min-height: 46px;
+  color: #b0c7bd;
+  font-weight: 500;
+}
+nav button.active {
+  background: #214b3a;
+  color: #d4ffe6;
+  box-shadow: inset 3px 0 #7be5ac;
+}
+nav button:hover {
+  background: #1b3e31;
+  color: white;
+}
+.nav-count {
+  background: #315c47;
+  color: #d4ffe6;
+}
+.profile {
+  margin-top: auto;
+  border-color: #2b483d;
+  padding-top: 20px;
+}
+.avatar {
+  background: #294f3f;
+  color: #ccf5dd;
+}
+.content {
+  padding-top: 42px;
+  max-width: 1440px;
+}
+.page-heading {
+  margin-bottom: 22px;
+}
+h1 {
+  font-size: 29px;
+  letter-spacing: -0.9px;
+  color: #18372a;
+}
+.page-heading p {
+  color: #697b70;
+}
+.primary {
+  background: #147d59;
+  box-shadow: 0 2px 4px #0b493015;
+  border-radius: 9px;
+  min-height: 39px;
+}
+.primary:hover {
+  background: #0d6345;
+  box-shadow: 0 4px 10px #0b493024;
+}
+.secondary {
+  border-color: #dce5de;
+  border-radius: 9px;
+}
+.secondary:hover {
+  background: #f0f6f1;
+  border-color: #b4cebc;
+}
+.period-filter {
+  margin: 0 0 24px;
+  gap: 7px;
+}
+.period-filter > small {
+  font-size: 10px;
+  color: #748279;
+  margin: 0;
+}
+.period-filter > select {
+  border-radius: 9px;
+  color: #3f5749;
+  border-color: #dce5de;
+}
+.stat,
+.table-card,
+.chart-card,
+.health-card {
+  border-color: #e0e8e1;
+  border-radius: 14px;
+  box-shadow: 0 2px 4px #18372a03;
+}
+.stat {
+  padding: 22px;
+}
+.stat strong {
+  color: #18372a;
+  letter-spacing: -1px;
+}
+.stat > div > span {
+  background: #eaf4ee;
+  color: #39805d;
+  border-radius: 10px;
+}
+.health-metrics > div {
+  background: #f3f7f3;
+  border-radius: 10px;
+}
+.metric-help {
+  margin: 12px 0 20px;
+  color: #6b7c70;
+  font-size: 12px;
+}
+.metric-help summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.metric-help p {
+  max-width: 760px;
+  margin-top: 8px;
+}
+.domain-health > .section-heading {
+  margin-bottom: 8px;
+}
+footer,
+.app-footer {
+  color: #6b7c70;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+@media (max-width: 760px) {
+  .content {
+    padding-top: 24px;
+  }
+  nav {
+    margin-top: 20px;
+  }
+  .profile {
+    margin-top: 16px;
+  }
+  h1 {
+    font-size: 25px;
+  }
+}
+
+@media (max-width: 800px) { nav { margin-top: 18px; overflow-x: auto; } nav button { flex: 0 0 auto; width: auto; white-space: nowrap; } }

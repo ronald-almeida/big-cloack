@@ -82,23 +82,25 @@ export default function DomainsPanel({ domains, request, refresh, onDelete }) {
   }, [domains, busy, configured]);
   return (
     <>
-      <div className={"integration-card " + (configured ? "ready" : "")}>
-        <PlugZap size={22} />
-        <div>
-          <b>
-            {configured === null
-              ? "Verificando integração..."
-              : configured
-                ? "Integração configurada"
-                : "Integração Cloudflare pendente"}
-          </b>
-          <p>
-            {configured
-              ? "O painel configura o domínio, o DNS do redirector e acompanha a ativação do HTTPS."
-              : "A credencial Cloudflare precisa ser configurada uma única vez no servidor. Depois disso, os domínios são conectados por aqui."}
-          </p>
+      {!configured && (
+        <div className="integration-card">
+          <PlugZap size={22} />
+          <div>
+            <b>
+              {configured === null
+                ? "Verificando integração..."
+                : configured
+                  ? "Integração configurada"
+                  : "Integração Cloudflare pendente"}
+            </b>
+            <p>
+              {configured
+                ? "O painel configura o domínio, o DNS do redirector e acompanha a ativação do HTTPS."
+                : "A credencial Cloudflare precisa ser configurada uma única vez no servidor. Depois disso, os domínios são conectados por aqui."}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
       {error && (
         <div className="error" role="alert">
           {error}
