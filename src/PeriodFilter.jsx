@@ -30,23 +30,16 @@ export function periodQuery(value) {
 export default function PeriodFilter({ value, onChange }) {
   return (
     <div className="period-filter">
-      <div role="group" aria-label="Período">
-        {[
-          ["1", "Hoje"],
-          ["7", "Últimos 7 dias"],
-          ["30", "Últimos 30 dias"],
-          ["custom", "Personalizado"],
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            className={value.preset === key ? "primary" : "secondary"}
-            aria-pressed={value.preset === key}
-            onClick={() => onChange({ ...value, preset: key })}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <select
+        aria-label="Período"
+        value={value.preset}
+        onChange={(e) => onChange({ ...value, preset: e.target.value })}
+      >
+        <option value="1">Hoje</option>
+        <option value="7">Últimos 7 dias</option>
+        <option value="30">Últimos 30 dias</option>
+        <option value="custom">Personalizado</option>
+      </select>
       {value.preset === "custom" && (
         <div className="period-dates">
           <label>
