@@ -2,19 +2,27 @@
   "name": "big-cloack-redirect",
   "main": "workers/redirect.mjs",
   "compatibility_date": "2026-09-24",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": false,
   "preview_urls": false,
-  "observability": { "enabled": true },
+  "observability": {
+    "enabled": true
+  },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "big-cloack",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "758afe7b-d480-41d5-95dd-8f948c82da3e",
       "migrations_dir": "migrations"
     }
   ],
   "kv_namespaces": [
-    { "binding": "CACHE", "id": "00000000000000000000000000000000" }
-  ]
+    {
+      "binding": "CACHE",
+      "id": "9bec43f25c7f46bc9da49cf3a5a73e92"
+    }
+  ],
+  "account_id": "a0b4f2bd488fb248fa164b2b86ef0973"
 }

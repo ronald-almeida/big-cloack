@@ -16,7 +16,11 @@ Gerenciador de links nativo Cloudflare: painel React no Pages, API Worker privad
 
 ## Status desta entrega
 
-Código e testes locais implementados. **Ainda não publicado.** A conexão disponível da Cloudflare respondeu `Authentication error` ao criar D1; o domínio `aprovabmyksh.com` não aparece na conta conectada e o Access está desativado. Os IDs em Wrangler são placeholders e a publicação exige preenchê-los. Nenhum link ou dado antigo foi importado.
+Workers `big-cloack-api` e `big-cloack-redirect`, Pages `big-cloack-admin`, D1 e KV publicados na conta autorizada em 24/09/2026. As três migrations foram aplicadas e o banco iniciou vazio. Cloudflare Access está configurado para `aprovabmyksh.com`, com política restrita ao e-mail administrativo e One-time PIN habilitado. Os endereços Pages de produção e de deployment e a API retornam 401 sem autenticação. Pages está configurado com `fail_open: false`.
+
+O domínio personalizado foi cadastrado no Pages; sua ativação aguarda o apontamento DNS para `big-cloack-admin.pages.dev`. O teste completo com login real ainda depende dessa ativação. A conexão automática de novos domínios também depende do secret `CLOUDFLARE_API_TOKEN` no Worker administrativo, conforme as instruções abaixo. O login OAuth de publicação não substitui essa credencial persistente do aplicativo.
+
+Os IDs públicos dos recursos estão preenchidos nos arquivos Wrangler; nenhuma credencial é versionada. A conexão do assistente permanece somente leitura, e a publicação foi feita com autorização OAuth local do Wrangler. No Windows restrito, os bundles foram preparados pelo Vite e enviados pela API oficial; o Pages usa um Worker equivalente à função `functions/[[path]].js`, passando arquivos estáticos por `env.ASSETS.fetch`. Em ambiente sem essa restrição, os comandos Wrangler abaixo continuam sendo o fluxo normal de publicação.
 
 ## Desenvolvimento e testes
 
@@ -107,4 +111,4 @@ Os registros de analytics são assíncronos via `waitUntil`; falhas são registr
 - `wrangler*.jsonc`: recursos e bindings; `scripts/configure.mjs` preenche IDs.
 - `.github/workflows/verify.yml`: build, testes e dry-run dos bundles em Linux.
 
-Após alterar os bindings, gere os tipos com `pnpm exec wrangler types -c wrangler.api.jsonc` e o equivalente para o redirector. A validação do runtime Cloudflare e o teste de login real continuam pendentes enquanto a conta não permitir publicar.
+Após alterar os bindings, gere os tipos com `pnpm exec wrangler types -c wrangler.api.jsonc` e o equivalente para o redirector. Antes de divulgar o painel, conclua a ativação DNS e valide o login real e as operações autenticadas em produção.

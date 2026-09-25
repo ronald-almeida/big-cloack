@@ -2,12 +2,20 @@
   "name": "big-cloack-admin",
   "pages_build_output_dir": "dist",
   "compatibility_date": "2026-09-24",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "vars": {
     "ADMIN_EMAIL": "ronald.almeida307@gmail.com",
     "ADMIN_ORIGIN": "https://aprovabmyksh.com",
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": ""
+    "ACCESS_TEAM_DOMAIN": "nameless-darkness-a5aa.cloudflareaccess.com",
+    "ACCESS_AUD": "a6e23bdef49f2c84f08e7b477c093ec4ecb436aef68ca9096537dbfc10e47f60"
   },
-  "services": [{ "binding": "ADMIN_API", "service": "big-cloack-api" }]
+  "services": [
+    {
+      "binding": "ADMIN_API",
+      "service": "big-cloack-api"
+    }
+  ],
+  "account_id": "a0b4f2bd488fb248fa164b2b86ef0973"
 }
