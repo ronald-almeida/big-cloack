@@ -40,8 +40,10 @@ async function cf(env, path, method = "GET", data) {
     },
     body: data ? JSON.stringify(data) : undefined,
     signal: AbortSignal.timeout(10000),
-    redirect: "error",
+    redirect: "manual",
   });
+  if (response.status >= 300 && response.status < 400)
+    throw new Error("A API Cloudflare retornou um redirecionamento inesperado.");
   if ([401, 403].includes(response.status))
     throw new Error(
       "A credencial Cloudflare não tem as permissões necessárias para este domínio.",
@@ -226,3 +228,4 @@ export async function connectDomain(env, domain, input = {}) {
       .run();
   }
 }
+
