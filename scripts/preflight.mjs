@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 for (const file of [
   "wrangler.api.jsonc",
+  "wrangler.farm.jsonc",
   "wrangler.redirect.jsonc",
   "wrangler.jsonc",
 ]) {

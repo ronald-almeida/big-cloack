@@ -1,5 +1,6 @@
 import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import { lookupCnpj } from "./cnpj.mjs";
+import { farmAPI } from "./farm-api.mjs";
 import {
   cloudflareConfigured,
   connectDomain,
@@ -81,6 +82,7 @@ export default {
     )
       return json({ error: "Origem não permitida." }, 403);
     try {
+      if (path.startsWith("/api/farm/")) return farmAPI(request, env, body);
       if (path === "/api/cnpj" && request.method === "GET")
         return json(await lookupCnpj(u.searchParams.get("cnpj")));
       if (path === "/api/links" && request.method === "GET") {

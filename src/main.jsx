@@ -1,6 +1,7 @@
 import TrafficFilters from "./TrafficFilters.jsx";
 import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import PeriodFilter, { periodQuery } from "./PeriodFilter.jsx";
+import FarmPanel from "./FarmPanel.jsx";
 import DomainHealth from "./DomainHealth.jsx";
 import DomainsPanel from "./DomainsPanel.jsx";
 import React, { useState, useEffect, useRef } from "react";
@@ -223,6 +224,7 @@ function App() {
     ["Analytics", BarChart3],
     ["Acessos", Search],
     ["Domínios", Globe],
+    ["Farm BM", Globe],
   ];
   const filtered = links.filter((l) =>
     (l.name + " " + l.slug).toLowerCase().includes(search.toLowerCase()),
@@ -290,7 +292,7 @@ function App() {
             <div>
               <h1>{page}</h1>
               <p>
-                {page === "Acessos"
+                {page === "Farm BM" ? "Crie e publique os sites das suas empresas." : page === "Acessos"
                   ? "Veja quando cada link foi aberto e qual destino foi aplicado."
                   : page === "Domínios"
                     ? "Conecte seus domínios e compartilhe links com sua marca."
@@ -299,14 +301,14 @@ function App() {
                       : "Gerencie destinos. Acompanhe cada acesso."}
               </p>
             </div>
-            {!["Domínios", "Acessos"].includes(page) && (
+            {!["Domínios", "Acessos", "Farm BM"].includes(page) && (
               <button className="primary" onClick={() => edit()}>
                 <Plus size={18} />
                 Criar link
               </button>
             )}
           </div>
-          <PeriodFilter value={periodValue} onChange={setPeriodValue} />
+          {page !== "Farm BM" && <PeriodFilter value={periodValue} onChange={setPeriodValue} />}
           {error && (
             <div role="alert" className="error">
               {error}
@@ -321,7 +323,7 @@ function App() {
               {notice}
             </div>
           )}
-          {!["Domínios", "Acessos"].includes(page) && (
+          {!["Domínios", "Acessos", "Farm BM"].includes(page) && (
             <>
               <div className="period">
                 <span>
@@ -695,6 +697,7 @@ function App() {
               />
             </>
           )}
+          {page === "Farm BM" && <FarmPanel request={api} />}
           {page === "Acessos" && (
             <AccessLogs
               links={links}
