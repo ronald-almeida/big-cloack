@@ -29,10 +29,11 @@ CREATE TABLE farm_deployments (
 );
 CREATE INDEX farm_deployments_site ON farm_deployments(site_id,created_at);
 CREATE TRIGGER farm_capacity_insert BEFORE INSERT ON farm_sites BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM farm_domains WHERE id=NEW.domain_id AND active=1 AND zone_status='active') THEN RAISE(ABORT,'FARM_DOMAIN_INACTIVE') END;
- SELECT CASE WHEN (SELECT site_limit FROM farm_domains WHERE id=NEW.domain_id) IS NOT NULL AND (SELECT COUNT(*) FROM farm_sites WHERE domain_id=NEW.domain_id)>=(SELECT site_limit FROM farm_domains WHERE id=NEW.domain_id) THEN RAISE(ABORT,'FARM_CAPACITY') END;
+ SELECT RAISE(ABORT,'FARM_DOMAIN_INACTIVE') WHERE NOT EXISTS(SELECT 1 FROM farm_domains WHERE id=NEW.domain_id AND active=1 AND zone_status='active');
+ SELECT RAISE(ABORT,'FARM_CAPACITY') WHERE (SELECT site_limit FROM farm_domains WHERE id=NEW.domain_id) IS NOT NULL AND (SELECT COUNT(*) FROM farm_sites WHERE domain_id=NEW.domain_id)>=(SELECT site_limit FROM farm_domains WHERE id=NEW.domain_id);
 END;
 CREATE TRIGGER farm_capacity_move BEFORE UPDATE OF domain_id ON farm_sites WHEN OLD.domain_id<>NEW.domain_id BEGIN
- SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM farm_domains WHERE id=NEW.domain_id AND active=1 AND zone_status='active') THEN RAISE(ABORT,'FARM_DOMAIN_INACTIVE') END;
- SELECT CASE WHEN (SELECT site_limit FROM farm_domains WHERE id=NEW.domain_id) IS NOT NULL AND (SELECT COUNT(*) FROM farm_sites WHERE domain_id=NEW.domain_id)>=(SELECT site_limit FROM farm_domains WHERE id=NEW.domain_id) THEN RAISE(ABORT,'FARM_CAPACITY') END;
+ SELECT RAISE(ABORT,'FARM_DOMAIN_INACTIVE') WHERE NOT EXISTS(SELECT 1 FROM farm_domains WHERE id=NEW.domain_id AND active=1 AND zone_status='active');
+ SELECT RAISE(ABORT,'FARM_CAPACITY') WHERE (SELECT site_limit FROM farm_domains WHERE id=NEW.domain_id) IS NOT NULL AND (SELECT COUNT(*) FROM farm_sites WHERE domain_id=NEW.domain_id)>=(SELECT site_limit FROM farm_domains WHERE id=NEW.domain_id);
 END;
+

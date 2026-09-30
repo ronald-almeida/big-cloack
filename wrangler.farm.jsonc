@@ -11,7 +11,8 @@
       "binding": "DB",
       "database_name": "big-cloack",
       "database_id": "758afe7b-d480-41d5-95dd-8f948c82da3e",
-      "migrations_dir": "migrations",
-    },
-  ],
+      "migrations_dir": "migrations"
+    }
+  ]
 }
+
