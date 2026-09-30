@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { harness } from "./harness.mjs";
 import { renderFarm } from "../workers/farm-render.mjs";
 import { farmThemes, farmSlug } from "../shared/farm.mjs";
@@ -199,6 +198,67 @@ test("farm authenticated lifecycle, BrasilAPI, capacity, HEAD snapshots, rename,
     h.close();
   }
 });
+test("automatic reservations spread simultaneous creations without exceeding capacity", async () => {
+  const h = await setup();
+  try {
+    await domain(h, "auto-one.com", 1);
+    await domain(h, "auto-two.com", 1);
+    const responses = await Promise.all(
+      ["first", "second", "third"].map((subdomain) =>
+        h.call("farm/sites", "POST", input({ subdomain })),
+      ),
+    );
+    assert.deepEqual(responses.map((r) => r.status).sort(), [201, 201, 400]);
+    assert.deepEqual(
+      h.db
+        .prepare("SELECT COUNT(*) n FROM farm_sites GROUP BY domain_id")
+        .all()
+        .map((r) => r.n),
+      [1, 1],
+    );
+  } finally {
+    h.close();
+  }
+});
+test("interrupted address change keeps cleanup metadata and safely recovers on republish", async () => {
+  const h = await setup();
+  try {
+    const d = await domain(h);
+    const { id } = await (
+      await h.call("farm/sites", "POST", input({ domain_id: d.id }))
+    ).json();
+    await h.call("farm/sites/" + id + "/publish", "POST", {});
+    h.state.fail = true;
+    assert.equal(
+      (
+        await h.call(
+          "farm/sites/" + id,
+          "PUT",
+          input({ domain_id: d.id, subdomain: "renamed" }),
+        )
+      ).status,
+      400,
+    );
+    const s = h.db.prepare("SELECT * FROM farm_sites WHERE id=?").get(id);
+    assert.ok(s.pending_address);
+    assert.equal(s.subdomain, "renamed");
+    assert.equal(h.bindings.size, 1);
+    h.state.fail = false;
+    assert.equal(
+      (await h.call("farm/sites/" + id + "/publish", "POST", {})).status,
+      200,
+    );
+    assert.equal(h.bindings.size, 1);
+    assert.ok(h.bindings.has("renamed.farm-example.com"));
+    assert.equal(
+      h.db.prepare("SELECT pending_address FROM farm_sites WHERE id=?").get(id)
+        .pending_address,
+      null,
+    );
+  } finally {
+    h.close();
+  }
+});
 test("database guards simultaneous capacity, inactive domains, failures and retry", async () => {
   const h = await setup();
   try {
@@ -256,3 +316,4 @@ test("database guards simultaneous capacity, inactive domains, failures and retr
     h.close();
   }
 });
+
