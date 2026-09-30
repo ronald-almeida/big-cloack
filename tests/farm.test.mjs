@@ -4,6 +4,7 @@ import { harness } from "./harness.mjs";
 import { renderFarm } from "../workers/farm-render.mjs";
 import { farmThemes, farmSlug } from "../shared/farm.mjs";
 import farmPublic from "../workers/farm-public.mjs";
+import sharedAPI from "../workers/api.mjs";
 const company = {
   cnpj: "53749174000118",
   razao: "Empresa Teste LTDA",
@@ -198,6 +199,55 @@ test("farm authenticated lifecycle, BrasilAPI, capacity, HEAD snapshots, rename,
     h.close();
   }
 });
+test("shared API serves only explicitly published Farm hosts and preserves authentication", async () => {
+  const h = await setup();
+  try {
+    const d = await domain(h);
+    const { id } = await (
+      await h.call("farm/sites", "POST", input({ domain_id: d.id }))
+    ).json();
+    const host = "https://empresa-teste.farm-example.com";
+    const call = (url, method = "GET") =>
+      sharedAPI.fetch(new Request(url, { method }), h.env);
+    assert.equal((await call(host + "/")).status, 401);
+    await h.call("farm/sites/" + id + "/publish", "POST", {});
+    assert.equal(
+      h.bindings.get("empresa-teste.farm-example.com").service,
+      "big-cloack-api",
+    );
+    assert.equal((await call(host + "/")).status, 200);
+    assert.equal((await call(host + "/index.html")).status, 200);
+    assert.equal(await (await call(host + "/", "HEAD")).text(), "");
+    assert.equal(
+      (await (await call(host + "/__farm-check")).json()).site_id,
+      id,
+    );
+    for (const path of [
+      "/api",
+      "/api/links",
+      "/api/farm/sites",
+      "/api/farm/domains",
+      "/other",
+    ]) {
+      assert.equal((await call(host + path)).status, 401, path);
+    }
+    for (const method of ["POST", "PUT", "DELETE"])
+      assert.equal((await call(host + "/", method)).status, 401);
+    assert.equal((await call(h.env.ADMIN_ORIGIN + "/")).status, 401);
+    assert.equal((await call("https://unknown.example/")).status, 401);
+    assert.equal((await h.call("links")).status, 200);
+    await h.call("farm/domains/" + d.id, "PUT", { active: false });
+    assert.equal((await call(host + "/")).status, 401);
+    h.env.DB = {
+      prepare() {
+        throw Error("database unavailable");
+      },
+    };
+    assert.equal((await call(host + "/")).status, 401);
+  } finally {
+    h.close();
+  }
+});
 test("automatic reservations spread simultaneous creations without exceeding capacity", async () => {
   const h = await setup();
   try {
@@ -316,4 +366,3 @@ test("database guards simultaneous capacity, inactive domains, failures and retr
     h.close();
   }
 });
-

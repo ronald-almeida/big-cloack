@@ -1,6 +1,6 @@
 # Farm BM
 
-Módulo separado para sites institucionais: menu **Farm BM → Domínios Farm / Criar Site / Sites**. O Worker público `big-cloack-farm` usa somente tabelas `farm_*`. O redirector, Real/Espera, bot detection e os domínios do Cloak não são alterados.
+Módulo separado para sites institucionais: menu **Farm BM → Domínios Farm / Criar Site / Sites**. O módulo público `farm-public.mjs` usa somente tabelas `farm_*` e compartilha o Worker `big-cloack-api`, conforme autorização do titular. Não consome outro Worker na conta. O redirector, Real/Espera, bot detection e os domínios do Cloak não são alterados.
 
 ## Fluxo
 
@@ -22,12 +22,11 @@ pnpm install --frozen-lockfile
 pnpm test
 pnpm build
 pnpm exec wrangler d1 migrations apply DB --remote -c wrangler.api.jsonc
-pnpm run deploy:farm
 pnpm run deploy:api
 pnpm run deploy:panel
 ```
 
-A migration `0006_farm.sql` adiciona somente `farm_domains`, `farm_sites`, `farm_deployments`, índices e triggers próprios. O Worker Farm recebe o binding D1 do mesmo banco, mas não consulta as tabelas do Cloak.
+A migration `0006_farm.sql` adiciona somente `farm_domains`, `farm_sites`, `farm_deployments`, índices e triggers próprios. O módulo público não consulta as tabelas do Cloak. Somente GET/HEAD em `/`, `/index.html` e `/__farm-check`, em hosts distintos do painel e correspondentes a um site publicado num domínio Farm ativo, recebem conteúdo público. Hosts desconhecidos, rascunhos, domínios inativos, falhas de consulta e todas as rotas administrativas continuam passando pelo Cloudflare Access. O marcador `big-cloack-farm` na verificação HTTPS identifica o módulo, não um Worker adicional.
 
 A API mantém a validação de JWT Cloudflare Access, e-mail autorizado e origem das requisições de escrita. Configure o secret `CLOUDFLARE_API_TOKEN` no **big-cloack-api** e `CLOUDFLARE_ACCOUNT_ID`. O token precisa de leitura/criação das zonas autorizadas, leitura de DNS e edição de Workers/Custom Domains na conta. Não enviar o token ao navegador. O mesmo secret já usado pela integração de domínios é reaproveitado; novas zonas podem exigir ampliar o escopo da credencial pelo titular da conta.
 

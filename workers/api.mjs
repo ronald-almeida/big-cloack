@@ -1,6 +1,7 @@
 import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import { lookupCnpj } from "./cnpj.mjs";
 import { farmAPI } from "./farm-api.mjs";
+import { tryFarmPublic } from "./farm-public.mjs";
 import {
   cloudflareConfigured,
   connectDomain,
@@ -66,6 +67,17 @@ function decodeTraffic(row) {
 }
 export default {
   async fetch(request, env) {
+    const incoming = new URL(request.url);
+    // Authorized shared hosting: only published Farm hosts and explicit public
+    // read paths bypass Access. Every API path retains authentication.
+    if (
+      ["GET", "HEAD"].includes(request.method) &&
+      ["/", "/index.html", "/__farm-check"].includes(incoming.pathname) &&
+      incoming.hostname !== new URL(env.ADMIN_ORIGIN).hostname
+    ) {
+      const publicResponse = await tryFarmPublic(request, env);
+      if (publicResponse) return publicResponse;
+    }
     try {
       await authenticate(request, env);
     } catch {

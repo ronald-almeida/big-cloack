@@ -1,6 +1,6 @@
 import { renderFarm } from "./farm-render.mjs";
-export default {
-  async fetch(request, env) {
+const farmPublic = {
+  async fetch(request, env, { fallthrough = false } = {}) {
     const url = new URL(request.url);
     const headers = {
       "Cache-Control": "no-store",
@@ -16,7 +16,9 @@ export default {
         .bind(url.hostname)
         .first();
       if (!site)
-        return new Response("Site não disponível", { status: 404, headers });
+        return fallthrough
+          ? null
+          : new Response("Site não disponível", { status: 404, headers });
       if (url.pathname === "/__farm-check")
         return Response.json(
           {
@@ -39,6 +41,7 @@ export default {
         { headers: { ...headers, "Content-Type": "text/html; charset=utf-8" } },
       );
     } catch {
+      if (fallthrough) return null;
       return new Response("Site temporariamente indisponível", {
         status: 503,
         headers,
@@ -46,3 +49,7 @@ export default {
     }
   },
 };
+export default farmPublic;
+export function tryFarmPublic(request, env) {
+  return farmPublic.fetch(request, env, { fallthrough: true });
+}

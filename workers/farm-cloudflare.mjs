@@ -1,4 +1,4 @@
-const service = "big-cloack-farm";
+const service = "big-cloack-api";
 export async function farmCF(env, path, method = "GET", data) {
   if (
     !env.CLOUDFLARE_API_TOKEN ||
@@ -110,7 +110,7 @@ export async function verifyFarm(site, domain) {
     const data = await response.json();
     return (
       response.ok &&
-      data.service === service &&
+      data.service === "big-cloack-farm" &&
       data.site_id === site.id &&
       data.version === site.published_version
     );
