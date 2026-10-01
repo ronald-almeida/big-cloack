@@ -472,7 +472,9 @@ export default function FarmPanel({ request }) {
                         }));
                         setPreview("");
                         setNotice(
-                          "Dados encontrados na BrasilAPI. Revise antes de publicar.",
+                          (result.notice ||
+                            `Dados encontrados na ${result.source}.`) +
+                            " Revise antes de publicar.",
                         );
                       })
                     }

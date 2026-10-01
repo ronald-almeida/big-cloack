@@ -1,5 +1,6 @@
 import { farmThemes, farmSlug } from "../shared/farm.mjs";
 import { normalizeCnpj } from "./cnpj.mjs";
+import { lookupFarmCnpj } from "./farm-cnpj.mjs";
 import {
   farmZone,
   bindFarm,
@@ -166,44 +167,6 @@ async function publish(env, s) {
     throw error;
   }
 }
-async function cnpj(value) {
-  const cnpj = normalizeCnpj(value);
-  try {
-    const r = await fetch("https://brasilapi.com.br/api/cnpj/v1/" + cnpj, {
-      signal: AbortSignal.timeout(10000),
-      redirect: "manual",
-      headers: { Accept: "application/json" },
-    });
-    if (!r.ok) throw Error();
-    const d = await r.json();
-    if (!d.razao_social || String(d.cnpj).replace(/\D/g, "") !== cnpj)
-      throw Error();
-    return {
-      source: "BrasilAPI",
-      data: {
-        cnpj,
-        razao: text(d.razao_social),
-        fantasia: text(d.nome_fantasia),
-        abertura: text(d.data_inicio_atividade, 30).replace(
-          /^(\d{4})-(\d{2})-(\d{2})$/,
-          "$3/$2/$1",
-        ),
-        atividade: text(
-          [d.cnae_fiscal, d.cnae_fiscal_descricao].filter(Boolean).join(" - "),
-          500,
-        ),
-        cidade: text(d.municipio, 100),
-        uf: text(d.uf, 2),
-        telefone: text(d.ddd_telefone_1, 25),
-        email: text(d.email, 160),
-      },
-    };
-  } catch {
-    throw Error(
-      "Não foi possível consultar a BrasilAPI agora. Preencha ou revise os dados manualmente.",
-    );
-  }
-}
 export async function farmAPI(request, env, readBody) {
   const u = new URL(request.url),
     p = u.pathname,
@@ -211,7 +174,7 @@ export async function farmAPI(request, env, readBody) {
   try {
     if (p === "/api/farm/themes" && m === "GET") return json(farmThemes);
     if (p === "/api/farm/cnpj" && m === "GET")
-      return json(await cnpj(u.searchParams.get("cnpj")));
+      return json(await lookupFarmCnpj(u.searchParams.get("cnpj")));
     if (p === "/api/farm/preview" && m === "POST") {
       const v = data(await readBody(request));
       return json({ html: renderFarm(v.data, v.theme, "") });

@@ -115,6 +115,7 @@ test("Farm outbound requests reject redirects without following them or forwardi
       assert.match((await r.json()).error, /manualmente/);
       assert.deepEqual(calls, [
         "https://brasilapi.com.br/api/cnpj/v1/" + company.cnpj,
+        "https://receitaws.com.br/v1/cnpj/" + company.cnpj,
       ]);
     }
   } finally {
