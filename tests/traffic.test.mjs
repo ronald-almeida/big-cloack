@@ -213,8 +213,10 @@ test("D1 migration, persistence, frequency, API filters, aggregates, cursors and
     }
     await visit({ "cf-connecting-ip": "203.0.113.2" });
     logs = await (await h.call("logs?classification=probable_bot")).json();
-    assert.equal(logs.items[0].traffic_signals.recent_requests_60s, 100);
-    assert.equal(logs.items[0].bot_provider, "unknown");
+    // Several requests can share the same timestamp; identify the burst by IP.
+    const burst = logs.items.find((row) => row.ip === "203.0.113.2");
+    assert.equal(burst.traffic_signals.recent_requests_60s, 100);
+    assert.equal(burst.bot_provider, "unknown");
     const page = await (await h.call("logs?classification=unknown")).json();
     const next = await (
       await h.call("logs?classification=unknown&cursor=" + page.next_cursor)

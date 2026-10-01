@@ -8,7 +8,8 @@ import {
   verifyDomain,
 } from "./domain-connect.mjs";
 import { period } from "./period.mjs";
-import { authenticate } from "./auth.mjs";
+import { authenticate, authenticateAccess } from "./auth.mjs";
+import { passwordRoutes } from "./password-auth.mjs";
 import { validateLink } from "./rules.mjs";
 const json = (data, status = 200) =>
   Response.json(data, {
@@ -68,6 +69,20 @@ function decodeTraffic(row) {
 export default {
   async fetch(request, env) {
     const incoming = new URL(request.url);
+    if (
+      incoming.pathname.startsWith("/api/auth/") ||
+      incoming.pathname === "/access-recovery/api"
+    ) {
+      try {
+        return await passwordRoutes(request, env, body, authenticateAccess);
+      } catch (error) {
+        console.error("Password authentication request failed", error.name);
+        return json(
+          { error: "Não foi possível concluir o acesso. Tente novamente." },
+          503,
+        );
+      }
+    }
     // Authorized shared hosting: only published Farm hosts and explicit public
     // read paths bypass Access. Every API path retains authentication.
     if (
@@ -81,10 +96,7 @@ export default {
     try {
       await authenticate(request, env);
     } catch {
-      return json(
-        { error: "Entre com a conta autorizada pelo Cloudflare Access." },
-        401,
-      );
+      return json({ error: "Sua sessão expirou. Entre novamente." }, 401);
     }
     const u = new URL(request.url),
       path = u.pathname;

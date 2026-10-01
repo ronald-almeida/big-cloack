@@ -58,10 +58,10 @@ test("authenticated CRUD, redirects, analytics, cache invalidation and security"
   const h = await harness();
   try {
     const pageResponse = await onRequest({
-      request: new Request("https://aprovabmyksh.com/", {
+      request: new Request("https://aprovabmyksh.com/access-recovery", {
         headers: { "Cf-Access-Jwt-Assertion": h.jwt },
       }),
-      env: h.env,
+      env: { ...h.env, ADMIN_API: { fetch: (r) => api.fetch(r, h.env) } },
       next: () => new Response("<html>private</html>"),
     });
     assert.equal(await pageResponse.text(), "<html>private</html>");

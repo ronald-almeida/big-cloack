@@ -2,6 +2,7 @@ import TrafficFilters from "./TrafficFilters.jsx";
 import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import PeriodFilter, { periodQuery } from "./PeriodFilter.jsx";
 import FarmPanel from "./FarmPanel.jsx";
+import Login, { SessionActions } from "./Login.jsx";
 import DomainHealth from "./DomainHealth.jsx";
 import DomainsPanel from "./DomainsPanel.jsx";
 import React, { useState, useEffect, useRef } from "react";
@@ -47,6 +48,7 @@ async function api(path, method = "GET", body) {
       "Sua sessão expirou. Atualize a página para entrar novamente.",
     );
   const data = await response.json();
+  if (response.status === 401) window.location.assign("/login");
   if (!response.ok) throw new Error(data.error || "Não foi possível concluir.");
   return data;
 }
@@ -285,6 +287,7 @@ function App() {
             Ronald Almeida<small>Administrador</small>
           </div>
         </div>
+        <SessionActions />
       </aside>
       <main>
         <div className="content">
@@ -292,13 +295,15 @@ function App() {
             <div>
               <h1>{page}</h1>
               <p>
-                {page === "Farm BM" ? "Crie e publique os sites das suas empresas." : page === "Acessos"
-                  ? "Veja quando cada link foi aberto e qual destino foi aplicado."
-                  : page === "Domínios"
-                    ? "Conecte seus domínios e compartilhe links com sua marca."
-                    : page === "Analytics"
-                      ? "Entenda de onde vêm os acessos e para onde eles vão."
-                      : "Gerencie destinos. Acompanhe cada acesso."}
+                {page === "Farm BM"
+                  ? "Crie e publique os sites das suas empresas."
+                  : page === "Acessos"
+                    ? "Veja quando cada link foi aberto e qual destino foi aplicado."
+                    : page === "Domínios"
+                      ? "Conecte seus domínios e compartilhe links com sua marca."
+                      : page === "Analytics"
+                        ? "Entenda de onde vêm os acessos e para onde eles vão."
+                        : "Gerencie destinos. Acompanhe cada acesso."}
               </p>
             </div>
             {!["Domínios", "Acessos", "Farm BM"].includes(page) && (
@@ -308,7 +313,9 @@ function App() {
               </button>
             )}
           </div>
-          {page !== "Farm BM" && <PeriodFilter value={periodValue} onChange={setPeriodValue} />}
+          {page !== "Farm BM" && (
+            <PeriodFilter value={periodValue} onChange={setPeriodValue} />
+          )}
           {error && (
             <div role="alert" className="error">
               {error}
@@ -957,4 +964,11 @@ function App() {
     </div>
   );
 }
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  window.location.pathname === "/login" ||
+    window.location.pathname.startsWith("/access-recovery") ? (
+    <Login />
+  ) : (
+    <App />
+  ),
+);
