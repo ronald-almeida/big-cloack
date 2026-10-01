@@ -13,8 +13,10 @@ export async function farmCF(env, path, method = "GET", data) {
     },
     body: data === undefined ? undefined : JSON.stringify(data),
     signal: AbortSignal.timeout(10000),
-    redirect: "error",
+    redirect: "manual",
   });
+  if (r.status >= 300 && r.status < 400)
+    throw Error("A API Cloudflare retornou um redirecionamento inesperado.");
   const result = await r.json();
   if (!r.ok || !result.success)
     throw Error(

@@ -5,6 +5,7 @@ import { renderFarm } from "../workers/farm-render.mjs";
 import { farmThemes, farmSlug } from "../shared/farm.mjs";
 import farmPublic from "../workers/farm-public.mjs";
 import sharedAPI from "../workers/api.mjs";
+import { farmCF } from "../workers/farm-cloudflare.mjs";
 const company = {
   cnpj: "53749174000118",
   razao: "Empresa Teste LTDA",
@@ -31,6 +32,8 @@ async function setup() {
   h.env.CLOUDFLARE_ACCOUNT_ID = "a".repeat(32);
   const state = { pending: false, fail: false, conflict: false };
   globalThis.fetch = async (url, options = {}) => {
+    if (options.redirect === "error")
+      throw new TypeError("Invalid redirect value at the edge");
     const u = new URL(String(url));
     calls.push({ url: String(url), method: options.method || "GET" });
     if (u.hostname === "api.cloudflare.com") {
@@ -85,6 +88,39 @@ async function domain(h, hostname = "farm-example.com", site_limit = 2) {
   assert.equal(r.status, 201, await r.clone().text());
   return r.json();
 }
+test("Farm outbound requests reject redirects without following them or forwarding credentials", async () => {
+  const h = await setup();
+  try {
+    const previous = globalThis.fetch;
+    for (const status of [301, 302, 303, 307, 308]) {
+      const calls = [];
+      globalThis.fetch = async (url, options = {}) => {
+        if (String(url).includes("cloudflareaccess.com"))
+          return previous(url, options);
+        calls.push(String(url));
+        assert.equal(options.redirect, "manual");
+        return new Response("Redirect body is not JSON", {
+          status,
+          headers: { Location: "https://untrusted.example/" },
+        });
+      };
+      await assert.rejects(
+        () => farmCF(h.env, "/zones"),
+        /redirecionamento inesperado/,
+      );
+      assert.deepEqual(calls, ["https://api.cloudflare.com/client/v4/zones"]);
+      calls.length = 0;
+      const r = await h.call("farm/cnpj?cnpj=" + company.cnpj);
+      assert.equal(r.status, 400);
+      assert.match((await r.json()).error, /manualmente/);
+      assert.deepEqual(calls, [
+        "https://brasilapi.com.br/api/cnpj/v1/" + company.cnpj,
+      ]);
+    }
+  } finally {
+    h.close();
+  }
+});
 test("original 20 themes render safely without editor, sample identity or inherited verification", () => {
   assert.equal(farmThemes.length, 20);
   assert.equal(farmSlug("São João & Filhos"), "sao-joao-filhos");

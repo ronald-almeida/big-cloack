@@ -171,7 +171,7 @@ async function cnpj(value) {
   try {
     const r = await fetch("https://brasilapi.com.br/api/cnpj/v1/" + cnpj, {
       signal: AbortSignal.timeout(10000),
-      redirect: "error",
+      redirect: "manual",
       headers: { Accept: "application/json" },
     });
     if (!r.ok) throw Error();
