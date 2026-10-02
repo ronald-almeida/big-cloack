@@ -33,6 +33,7 @@ const empty = {
   slug: "",
   mode: "waiting",
   device: "all",
+  captcha_enabled: false,
   real_urls: [],
   waiting_url: "",
   waiting_page: { theme: "sky" },
@@ -841,6 +842,26 @@ function App() {
                   </select>
                 </label>
               </div>
+              <label>
+                Verificação humana (Captcha)
+                <select
+                  value={editor.captcha_enabled ? "on" : "off"}
+                  onChange={(e) =>
+                    setEditor({
+                      ...editor,
+                      captcha_enabled: e.target.value === "on",
+                    })
+                  }
+                >
+                  <option value="off">Desativada</option>
+                  <option value="on">Ativada — Cloudflare Turnstile</option>
+                </select>
+                <small>
+                  Exige Turnstile configurado no servidor. Após verificar, o
+                  visitante segue as regras de modo e dispositivo. A confirmação
+                  vale por cinco minutos neste link e domínio.
+                </small>
+              </label>
               <div className="rule-info">
                 {editor.mode === "waiting"
                   ? "Todos os dispositivos vão para Espera."

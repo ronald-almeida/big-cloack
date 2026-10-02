@@ -52,11 +52,17 @@ export function validateLink(input) {
   const real_urls = [...new Set(input.real_urls.map((v) => httpUrl(v)))];
   if (input.mode === "real" && !real_urls.length)
     throw new Error("O modo Real precisa de ao menos uma URL.");
+  if (
+    input.captcha_enabled !== undefined &&
+    ![true, false, 0, 1].includes(input.captcha_enabled)
+  )
+    throw new Error("Verificação humana inválida.");
   return {
     name,
     slug,
     mode: input.mode,
     device: input.device,
+    captcha_enabled: Boolean(input.captcha_enabled),
     real_urls,
     waiting_url: httpUrl(input.waiting_url, true),
     waiting_page: validateWaitingPage(input.waiting_page),

@@ -116,6 +116,7 @@ export default {
         return json(
           results.map((l) => ({
             ...l,
+            captcha_enabled: Boolean(l.captcha_enabled),
             real_urls: JSON.parse(l.real_urls),
             waiting_page: JSON.parse(l.waiting_page || "{}"),
           })),
@@ -134,7 +135,7 @@ export default {
         )
           throw new Error("Domínio de cadastro inválido.");
         await env.DB.prepare(
-          "INSERT INTO links(id,slug,name,mode,device,real_urls,waiting_url,waiting_page,version,domain_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO links(id,slug,name,mode,device,real_urls,waiting_url,waiting_page,version,domain_id,captcha_enabled) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         )
           .bind(
             id,
@@ -147,15 +148,26 @@ export default {
             JSON.stringify(l.waiting_page),
             crypto.randomUUID(),
             domainId,
+            Number(l.captcha_enabled),
           )
           .run();
         return json({ id, ...l, domain_id: domainId }, 201);
       }
       const match = path.match(/^\/api\/links\/([a-f0-9-]+)$/);
       if (match && request.method === "PUT") {
-        const l = validateLink(await body(request));
+        const input = await body(request);
+        // Older clients must not silently turn off an existing protection.
+        const previous = await env.DB.prepare(
+          "SELECT captcha_enabled FROM links WHERE id=?",
+        )
+          .bind(match[1])
+          .first();
+        const l = validateLink({
+          ...input,
+          captcha_enabled: input.captcha_enabled ?? previous?.captcha_enabled,
+        });
         const r = await env.DB.prepare(
-          "UPDATE links SET slug=?,name=?,mode=?,device=?,real_urls=?,waiting_url=?,waiting_page=?,version=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+          "UPDATE links SET slug=?,name=?,mode=?,device=?,real_urls=?,waiting_url=?,waiting_page=?,version=?,captcha_enabled=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
         )
           .bind(
             l.slug,
@@ -166,6 +178,7 @@ export default {
             l.waiting_url,
             JSON.stringify(l.waiting_page),
             crypto.randomUUID(),
+            Number(l.captcha_enabled),
             match[1],
           )
           .run();
