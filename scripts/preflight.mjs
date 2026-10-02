@@ -16,9 +16,11 @@ for (const file of [
   if (config.kv_namespaces?.some((d) => /^0+$/.test(d.id)))
     throw new Error("KV ainda não provisionado.");
   if (
+    file !== "wrangler.redirect.jsonc" &&
     config.vars &&
     (!config.vars.ACCESS_AUD || !config.vars.ACCESS_TEAM_DOMAIN)
   )
     throw new Error("Configure o Cloudflare Access antes do deploy.");
 }
 console.log("Configurações de publicação preenchidas.");
+

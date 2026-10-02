@@ -1,4 +1,5 @@
 import { recordTraffic } from "./traffic.mjs";
+import { captchaGate } from "./captcha.mjs";
 import { deviceType, destinationMode } from "./rules.mjs";
 import { renderWaitingPage } from "./waiting-page.mjs";
 export default {
@@ -10,7 +11,7 @@ export default {
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
     };
-    if (!["GET", "HEAD"].includes(request.method))
+    if (!["GET", "HEAD", "POST"].includes(request.method))
       return new Response("Método não permitido", { status: 405, headers });
     try {
       const domain = await env.DB.prepare(
@@ -21,10 +22,12 @@ export default {
       if (!domain)
         return new Response("Domínio não cadastrado", { status: 404, headers });
       if (url.pathname === "/__domain-check")
-        return Response.json(
-          { service: "big-cloack-redirect", domain_id: domain.id },
-          { headers },
-        );
+        return request.method === "POST"
+          ? new Response("Método não permitido", { status: 405, headers })
+          : Response.json(
+              { service: "big-cloack-redirect", domain_id: domain.id },
+              { headers },
+            );
       if (!domain.verified)
         return new Response("Domínio pendente de verificação", {
           status: 404,
@@ -53,6 +56,8 @@ export default {
           env.CACHE.put(key, JSON.stringify(link), { expirationTtl: 3600 }),
         );
       }
+      if (request.method === "POST" && !link.captcha_enabled)
+        return new Response("Método não permitido", { status: 405, headers });
       const device = deviceType(request.headers),
         mode = destinationMode(link, device),
         urls = JSON.parse(link.real_urls);
@@ -60,17 +65,23 @@ export default {
         mode === "real" && urls.length
           ? urls[crypto.getRandomValues(new Uint32Array(1))[0] % urls.length]
           : link.waiting_url;
-      ctx.waitUntil(
-        recordTraffic(
-          request,
-          env,
-          link,
-          url.hostname,
-          device,
-          mode,
-          receivedAt,
-        ).catch(() => console.error("analytics_write_failed")),
-      );
+      if (request.method !== "POST")
+        ctx.waitUntil(
+          recordTraffic(
+            request,
+            env,
+            link,
+            url.hostname,
+            device,
+            mode,
+            receivedAt,
+          ).catch(() => console.error("analytics_write_failed")),
+        );
+      if (link.captcha_enabled) {
+        const gate = await captchaGate(request, env, link);
+        if (gate.response) return gate.response;
+        if (gate.cookie) headers["Set-Cookie"] = gate.cookie;
+      }
       if (target)
         return new Response(null, {
           status: 302,
