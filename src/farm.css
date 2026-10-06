@@ -192,3 +192,44 @@
     padding: 16px;
   }
 }
+.farm-company-dialog {
+  width: min(800px, calc(100vw - 32px));
+  max-height: 85vh;
+  overflow: auto;
+  border: 1px solid #475569;
+  border-radius: 16px;
+  padding: 24px;
+  background: #fff;
+  color: #172b26;
+}
+.farm-company-dialog::backdrop {
+  background: #0009;
+}
+.farm-company-details {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 2fr;
+  gap: 8px 20px;
+}
+.farm-company-details dt {
+  color: #52645c;
+  overflow-wrap: anywhere;
+}
+.farm-company-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.farm-check {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+.farm-check input {
+  width: auto !important;
+}
+.farm-module [hidden] {
+  display: none !important;
+}
+.farm-company-dialog summary {
+  cursor: pointer;
+  padding: 16px 0;
+}

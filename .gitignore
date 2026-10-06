@@ -4,3 +4,10 @@ dist/
 .dev.vars*
 .env*
 !.env.example
+*.sqlite
+*.sqlite-*
+*.zip
+__pycache__/
+.env
+.env.local
+.dev.vars

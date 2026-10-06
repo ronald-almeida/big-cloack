@@ -16,6 +16,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s services/company-search -p 'test_*.py'
       - run: pnpm build
       - run: pnpm exec wrangler deploy --dry-run --outdir /tmp/api -c wrangler.api.jsonc
       - run: pnpm exec wrangler deploy --dry-run --outdir /tmp/redirect -c wrangler.redirect.jsonc

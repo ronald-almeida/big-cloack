@@ -1,5 +1,7 @@
 # Farm BM
 
+Busca/seleção de empresas: configuração, importador oficial, arquitetura isolada e testes em [COMPANY-SEARCH.md](COMPANY-SEARCH.md).
+
 Módulo separado para sites institucionais: menu **Farm BM → Domínios Farm / Criar Site / Sites**. O módulo público `farm-public.mjs` usa somente tabelas `farm_*` e compartilha o Worker `big-cloack-api`, conforme autorização do titular. Não consome outro Worker na conta. O redirector, Real/Espera, bot detection e os domínios do Cloak não são alterados.
 
 ## Fluxo

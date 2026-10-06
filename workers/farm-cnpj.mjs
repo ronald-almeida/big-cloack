@@ -1,4 +1,5 @@
-import { normalizeCnpj } from "./cnpj.mjs";
+import { normalizeFarmCnpj as normalizeCnpj } from "../shared/companies.mjs";
+import { isoDate, companyAge } from "../shared/companies.mjs";
 const clean = (v, max = 200) =>
   typeof v === "string" ? v.trim().slice(0, max) : "";
 const userAgent =
@@ -38,7 +39,12 @@ async function query(url, source, fetcher) {
   return data;
 }
 function mapCompany(d, id, source) {
-  if (!clean(d.razao_social) || String(d.cnpj || "").replace(/\D/g, "") !== id)
+  if (
+    !clean(d.razao_social) ||
+    String(d.cnpj || "")
+      .toUpperCase()
+      .replace(/[.\/\-\s]/g, "") !== id
+  )
     throw Error(source + ": dados incompletos ou CNPJ divergente");
   return {
     cnpj: id,
@@ -102,4 +108,39 @@ export async function lookupFarmCnpj(value, fetcher = fetch) {
     errors.join(". ") +
       ". Tente novamente mais tarde ou preencha os dados manualmente.",
   );
+}
+
+// Selection validation never falls back to the imported snapshot or manual data.
+export async function verifyFarmCompany(value, fetcher = fetch) {
+  const id = normalizeCnpj(value);
+  const raw = await query(
+    "https://brasilapi.com.br/api/cnpj/v1/" + id,
+    "BrasilAPI",
+    fetcher,
+  );
+  const mapped = mapCompany(raw, id, "BrasilAPI");
+  const status =
+    raw.situacao_cadastral == null ? NaN : Number(raw.situacao_cadastral);
+  if (![1, 2, 3, 4, 8].includes(status))
+    throw Error(
+      "BrasilAPI: situação cadastral ausente ou inválida. Não foi possível validar.",
+    );
+  return {
+    ...mapped,
+    abertura: isoDate(raw.data_inicio_atividade),
+    cnae: String(raw.cnae_fiscal || ""),
+    status_code: status,
+    situacao: {
+      1: "NULA",
+      2: "ATIVA",
+      3: "SUSPENSA",
+      4: "INAPTA",
+      8: "BAIXADA",
+    }[status],
+    idade: companyAge(raw.data_inicio_atividade),
+    matriz_filial: String(raw.identificador_matriz_filial || ""),
+    source: "BrasilAPI",
+    verified_at: new Date().toISOString(),
+    details: raw,
+  };
 }
