@@ -7,6 +7,7 @@ Gerenciador de links nativo Cloudflare: painel React no Pages, API Worker privad
 ## Funcionalidades
 
 - Criar, editar e excluir links; slug manual ou automático.
+- Slugs aceitam caminhos como `oferta/teste`, `curso/turma-1` e `netfiscal/mba/reforma`, com 3 a 64 caracteres no total. Letras são convertidas para minúsculas; números, hífen e sublinhado também são permitidos. Barras no início/fim, `//` e segmentos vazios são rejeitados. A slug completa é única no D1 (restrição `UNIQUE` existente, sem nova migration) e preservada nos redirects, na cópia e no QR Code.
 - Modo Real/Espera. Em Real, somente o dispositivo selecionado recebe uma URL real; os demais recebem Espera. Em Espera, todos recebem Espera.
 - Mobile inclui tablets. Classificação por Client Hint e User-Agent; é aproximada, não uma garantia de identidade. Não existem regras especiais para bots/crawlers.
 - Até 30 URLs reais com distribuição aleatória uniforme por acesso (não é alternância sequencial).

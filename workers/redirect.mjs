@@ -30,6 +30,7 @@ export default {
           status: 404,
           headers,
         });
+      // Remove only the URL's initial slash; the full path is the unique slug.
       const slug = url.pathname.slice(1);
       const meta = await env.DB.prepare(
         "SELECT id,version FROM links WHERE slug=?",
