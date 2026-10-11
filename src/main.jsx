@@ -1,4 +1,5 @@
 import TrafficFilters from "./TrafficFilters.jsx";
+import { cloakLinkUrl, validateSlug, SLUG_ERROR } from "../shared/slug.mjs";
 import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import PeriodFilter, { periodQuery } from "./PeriodFilter.jsx";
 import FarmPanel from "./FarmPanel.jsx";
@@ -191,7 +192,7 @@ function App() {
     setError("");
   }
   function linkUrl(l) {
-    return `https://${selectedDomain}/${l.slug}`;
+    return cloakLinkUrl(selectedDomain, l.slug);
   }
   async function copy(l) {
     try {
@@ -759,6 +760,7 @@ function App() {
                     editor.id ? "PUT" : "POST",
                     {
                       ...editor,
+                      slug: editor.slug ? validateSlug(editor.slug) : "",
                       real_urls: urls
                         .split("\n")
                         .map((s) => s.trim())
@@ -809,10 +811,12 @@ function App() {
                 <input
                   value={editor.slug}
                   onChange={(e) =>
-                    setEditor({ ...editor, slug: e.target.value })
+                    setEditor({ ...editor, slug: e.target.value.toLowerCase() })
                   }
-                  placeholder="minha-campanha"
+                  placeholder="oferta/teste"
+                  aria-describedby="slug-help"
                 />
+                <small id="slug-help">{SLUG_ERROR}</small>
               </label>
               <div className="form-grid">
                 <label>

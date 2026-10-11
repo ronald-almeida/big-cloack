@@ -1,4 +1,5 @@
 import { validateWaitingPage } from "./waiting-page.mjs";
+import { validateSlug } from "../shared/slug.mjs";
 export function deviceType(headers) {
   const hint = headers.get("sec-ch-ua-mobile");
   if (hint === "?1") return "mobile";
@@ -32,16 +33,9 @@ export function validateLink(input) {
   const name = String(input.name || "").trim();
   if (!name || name.length > 120)
     throw new Error("Informe um nome de até 120 caracteres.");
-  const slug = String(
+  const slug = validateSlug(
     input.slug || crypto.randomUUID().replaceAll("-", "").slice(0, 10),
-  )
-    .trim()
-    .toLowerCase();
-  if (
-    !/^[a-z0-9][a-z0-9_-]{2,63}$/.test(slug) ||
-    ["api", "health", "__domain-check"].includes(slug)
-  )
-    throw new Error("Slug: use 3 a 64 letras, números, hífen ou sublinhado.");
+  );
   if (
     !["real", "waiting"].includes(input.mode) ||
     !["all", "mobile", "desktop"].includes(input.device)
