@@ -1,6 +1,6 @@
 # Big Cloak
 
-**Login com senha:** implementação, configuração de publicação e recuperação estão em [LOGIN.md](LOGIN.md). Esse fluxo substitui a exigência de código de e-mail em cada entrada depois da ativação indicada no documento; Cloudflare Access permanece responsável por confirmar o administrador na criação/recuperação da senha. As seções históricas de implantação abaixo descrevem o acesso original.
+**Login próprio:** configuração, secrets, primeiro acesso, troca de senha e migração de Cloudflare Access estão em [LOGIN.md](LOGIN.md). O painel e as APIs exigem sessão própria; tokens Access não autenticam.
 
 Gerenciador de links nativo Cloudflare: painel React no Pages, API Worker privada via service binding, Worker público de redirects, banco D1 e cache KV. Sem Supabase, Lovable ou serviço externo de QR Code.
 
@@ -14,15 +14,11 @@ Gerenciador de links nativo Cloudflare: painel React no Pages, API Worker privad
 - **Acessos** mostra o histórico individual com data/hora, dispositivo, Real/Espera, link, domínio e país. Filtros por link, dispositivo, destino e intervalo; paginação de 50 registros sem repetir linhas quando chegam novos acessos. Horários e filtros usam o fuso do navegador (mostrado na tela); timestamps são armazenados em UTC. O final do intervalo é exclusivo. Nome/slug refletem o cadastro atual; excluir um link apaga seu histórico, conforme a confirmação do painel.
 - Analytics por período (7/30/90 dias), link, dispositivo, país e domínio; contadores totais por link. Datas em UTC, contagens de requisições GET, sem IPs ou identificação de visitantes únicos. HEAD não conta.
 - Conexão de domínios pelo painel: cadastro na Cloudflare quando necessário, vínculo com o redirector, DNS e acompanhamento do HTTPS. Copiar link pelo domínio escolhido; QR Code gerado localmente no navegador e baixável em PNG.
-- Cloudflare Access, restrito a `ronald.almeida307@gmail.com`, validado também na API e no Pages (assinatura, emissor, audiência e expiração do JWT).
+- Login administrativo por e-mail/senha, com hash PBKDF2, cookie assinado, expiração e revogação no D1.
 
-## Status desta entrega
+## Implantação
 
-Workers `big-cloack-api` e `big-cloack-redirect`, Pages `big-cloack-admin`, D1 e KV publicados na conta autorizada em 24/09/2026. As três migrations foram aplicadas e o banco iniciou vazio. Cloudflare Access está configurado para `aprovabmyksh.com`, com política restrita ao e-mail administrativo e One-time PIN habilitado. Os endereços Pages de produção e de deployment e a API retornam 401 sem autenticação. Pages está configurado com `fail_open: false`.
-
-O domínio personalizado foi cadastrado no Pages; sua ativação aguarda o apontamento DNS para `big-cloack-admin.pages.dev`. O teste completo com login real ainda depende dessa ativação. A conexão automática de novos domínios também depende do secret `CLOUDFLARE_API_TOKEN` no Worker administrativo, conforme as instruções abaixo. O login OAuth de publicação não substitui essa credencial persistente do aplicativo.
-
-Os IDs públicos dos recursos estão preenchidos nos arquivos Wrangler; nenhuma credencial é versionada. A conexão do assistente permanece somente leitura, e a publicação foi feita com autorização OAuth local do Wrangler. No Windows restrito, os bundles foram preparados pelo Vite e enviados pela API oficial; o Pages usa um Worker equivalente à função `functions/[[path]].js`, passando arquivos estáticos por `env.ASSETS.fetch`. Em ambiente sem essa restrição, os comandos Wrangler abaixo continuam sendo o fluxo normal de publicação.
+Os IDs públicos dos recursos estão nos arquivos Wrangler; nenhuma senha é versionada. O procedimento atual de implantação e migração está em [LOGIN.md](LOGIN.md). O estado do código não comprova o estado das regras de borda ou o deploy em produção.
 
 ## Desenvolvimento e testes
 
@@ -35,7 +31,7 @@ pnpm build
 node scripts/preview.mjs
 ```
 
-Preview local em `http://127.0.0.1:4173`, com banco SQLite em memória, adaptador D1 e JWT de teste efêmero. O preview começa vazio, descarta os dados ao parar e escuta somente em loopback. Ele usa os mesmos handlers da API; nunca é incluído no deploy. Não é um substituto do teste em Cloudflare.
+Preview local em `http://127.0.0.1:4173`, com banco SQLite em memória, adaptador D1 e sessão de teste efêmera. O preview começa vazio, descarta os dados ao parar e escuta somente em loopback. Ele usa os mesmos handlers da API; nunca é incluído no deploy. Não é um substituto do teste em Cloudflare.
 
 No ambiente desktop com restrições de subprocessos, os comandos equivalentes usados foram `node --test --test-isolation=none tests/*.test.mjs` e `node node_modules/vite/bin/vite.js build --configLoader native`.
 
@@ -45,31 +41,7 @@ As migrations `0002_waiting_pages_and_logs.sql` e `0003_domain_connections.sql` 
 
 ## Publicação
 
-1. Autorize a conta Cloudflare correta com escrita em Workers, D1, KV e Pages, além da configuração de Access e DNS para o domínio administrativo. Não grave tokens no repositório.
-2. Adicione `aprovabmyksh.com` à conta e conclua a delegação DNS. Ative o Zero Trust / Access. Crie uma aplicação Self-hosted para `aprovabmyksh.com`, incluindo todos os caminhos, com política Allow exclusivamente para `ronald.almeida307@gmail.com`. Use o login por código de e-mail (One-time PIN), se não houver provedor de identidade configurado. Não crie política Bypass.
-3. Crie os recursos:
-
-```sh
-pnpm exec wrangler login
-pnpm exec wrangler d1 create big-cloack
-pnpm exec wrangler kv namespace create CACHE
-pnpm exec wrangler pages project create big-cloack-admin --production-branch main
-```
-
-4. Configure as variáveis de ambiente `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_ID`, `KV_NAMESPACE_ID`, `ACCESS_TEAM_DOMAIN` (ex.: sua-equipe.cloudflareaccess.com, sem https) e `ACCESS_AUD` (Audience da aplicação Access). Execute:
-
-```sh
-node scripts/configure.mjs
-node scripts/preflight.mjs
-pnpm exec wrangler d1 migrations apply DB --remote -c wrangler.api.jsonc
-pnpm deploy:api
-pnpm deploy:redirect
-pnpm build
-pnpm deploy:panel
-```
-
-5. No projeto Pages, adicione `aprovabmyksh.com` em Custom domains e conclua o DNS. Confirme o login com o e-mail autorizado. A política Access deve estar ativa antes de divulgar o endereço.
-6. Verifique que URLs `pages.dev`, previews e requisições sem JWT não entregam o painel; `workers.dev` e previews dos Workers permanecem desabilitados. Teste criar/editar/excluir, URLs reais, Espera, mobile/desktop, domínio, QR Code e analytics em produção.
+Siga [LOGIN.md](LOGIN.md) para autenticação, configuração dos secrets, publicação de API/Pages e remoção de Access após os testes. Para provisionar IDs de infraestrutura, `scripts/configure.mjs` usa `CLOUDFLARE_ACCOUNT_ID`, `D1_DATABASE_ID` e `KV_NAMESPACE_ID`. A migração de autenticação não requer republicar o redirector.
 
 ## Adicionar domínios de redirect
 
@@ -92,7 +64,7 @@ Testes automatizados cobrem vínculo, repetição, conflito DNS, criação de zo
 ## Arquitetura e consistência
 
 ```text
-aprovabmyksh.com → Access → Pages (React + validação JWT)
+aprovabmyksh.com → Pages (React + validação de sessão própria)
                                 └─ /api/* → service binding → API Worker → D1
 domínio de redirect → Redirect Worker → D1 (domínio + versão atual)
                                       └─ KV (conteúdo da versão)
@@ -166,7 +138,7 @@ podem representar subrequests; ASN/IP não verificam identidade sozinhos.
 `created_at` registra o instante UTC de recebimento. Os campos solicitados de
 UA, IP, país, ASN, método, referer e CF-Ray ficam no registro. Strings e listas
 são limitadas em tamanho; cookies, Authorization e demais headers não são gravados.
-As APIs continuam protegidas pelo Cloudflare Access. Os novos dados pessoais
+As APIs continuam protegidas pela sessão administrativa própria. Os novos dados pessoais
 seguem a retenção já existente dos cliques (não há expiração automática).
 
 `GET /api/analytics` e `GET /api/logs` aceitam `classification`, `bot_provider` e

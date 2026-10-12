@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
-import { generateKeyPair, exportJWK, SignJWT } from "jose";
+import { credentialSql } from "../scripts/admin-credential.mjs";
 import api from "../workers/api.mjs";
 export async function harness() {
   const db = new DatabaseSync(":memory:");
@@ -56,43 +56,42 @@ export async function harness() {
         cache.set(k, v);
       },
     };
-  const { publicKey, privateKey } = await generateKeyPair("RS256");
-  const jwk = {
-    ...(await exportJWK(publicKey)),
-    kid: "test-key",
-    alg: "RS256",
-    use: "sig",
-  };
-  const issuer = "https://local-test.cloudflareaccess.com";
   const env = {
     DB,
     CACHE,
-    ADMIN_EMAIL: "ronald.almeida307@gmail.com",
+    ADMIN_EMAIL: "admin@example.com",
     ADMIN_ORIGIN: "https://aprovabmyksh.com",
-    ACCESS_TEAM_DOMAIN: "local-test.cloudflareaccess.com",
-    ACCESS_AUD: "test-audience",
+    AUTH_PASSWORD_PEPPER: "test-only-pepper".repeat(4),
+    AUTH_SESSION_SECRET: "a".repeat(64),
   };
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url, options) =>
-    String(url) === issuer + "/cdn-cgi/access/certs"
-      ? Response.json({ keys: [jwk] })
-      : originalFetch(url, options);
-  async function token(claims = {}) {
-    return new SignJWT({ email: env.ADMIN_EMAIL, ...claims })
-      .setProtectedHeader({ alg: "RS256", kid: "test-key" })
-      .setIssuer(claims.iss || issuer)
-      .setAudience(claims.aud || env.ACCESS_AUD)
-      .setIssuedAt()
-      .setExpirationTime(claims.exp || "1h")
-      .sign(privateKey);
+  const password = "Uma frase de teste 2026!";
+  async function provision(nextPassword = password) {
+    db.exec(
+      await credentialSql(
+        env.ADMIN_EMAIL,
+        nextPassword,
+        env.AUTH_PASSWORD_PEPPER,
+      ),
+    );
   }
-  const jwt = await token();
+  await provision();
+  const login = await api.fetch(
+    new Request(env.ADMIN_ORIGIN + "/api/auth/login", {
+      method: "POST",
+      headers: { Origin: env.ADMIN_ORIGIN, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: env.ADMIN_EMAIL, password }),
+    }),
+    env,
+  );
+  const cookie = login.headers.get("Set-Cookie").split(";")[0];
+  db.exec("DELETE FROM admin_login_limits");
+  const originalFetch = globalThis.fetch;
   async function call(path, method = "GET", data, headers = {}) {
     return api.fetch(
       new Request(env.ADMIN_ORIGIN + "/api/" + path, {
         method,
         headers: {
-          "Cf-Access-Jwt-Assertion": jwt,
+          Cookie: cookie,
           Origin: env.ADMIN_ORIGIN,
           "Content-Type": "application/json",
           ...headers,
@@ -107,8 +106,9 @@ export async function harness() {
     db,
     cache,
     call,
-    token,
-    jwt,
+    cookie,
+    password,
+    provision,
     close() {
       db.close();
       globalThis.fetch = originalFetch;

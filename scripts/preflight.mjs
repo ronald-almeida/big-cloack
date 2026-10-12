@@ -5,7 +5,7 @@ for (const file of [
   "wrangler.jsonc",
 ]) {
   const config = JSON.parse(await readFile(file, "utf8"));
-  if (!config.account_id)
+  if (file !== "wrangler.jsonc" && !config.account_id)
     throw new Error("Defina a conta com node scripts/configure.mjs.");
   if (
     config.d1_databases?.some((d) =>
@@ -16,9 +16,9 @@ for (const file of [
   if (config.kv_namespaces?.some((d) => /^0+$/.test(d.id)))
     throw new Error("KV ainda não provisionado.");
   if (
-    config.vars &&
-    (!config.vars.ACCESS_AUD || !config.vars.ACCESS_TEAM_DOMAIN)
+    file !== "wrangler.redirect.jsonc" &&
+    !(config.vars?.ADMIN_ORIGIN || "").startsWith("https://")
   )
-    throw new Error("Configure o Cloudflare Access antes do deploy.");
+    throw new Error("Configure ADMIN_ORIGIN com HTTPS.");
 }
 console.log("Configurações de publicação preenchidas.");

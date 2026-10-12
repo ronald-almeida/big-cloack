@@ -8,7 +8,7 @@ import {
   verifyDomain,
 } from "./domain-connect.mjs";
 import { period } from "./period.mjs";
-import { authenticate, authenticateAccess } from "./auth.mjs";
+import { authenticate } from "./auth.mjs";
 import { passwordRoutes } from "./password-auth.mjs";
 import { validateLink } from "./rules.mjs";
 const json = (data, status = 200) =>
@@ -69,12 +69,9 @@ function decodeTraffic(row) {
 export default {
   async fetch(request, env) {
     const incoming = new URL(request.url);
-    if (
-      incoming.pathname.startsWith("/api/auth/") ||
-      incoming.pathname === "/access-recovery/api"
-    ) {
+    if (incoming.pathname.startsWith("/api/auth/")) {
       try {
-        return await passwordRoutes(request, env, body, authenticateAccess);
+        return await passwordRoutes(request, env, body);
       } catch (error) {
         console.error("Password authentication request failed", error.name);
         return json(
@@ -84,7 +81,7 @@ export default {
       }
     }
     // Authorized shared hosting: only published Farm hosts and explicit public
-    // read paths bypass Access. Every API path retains authentication.
+    // read paths bypass admin authentication. Every API path retains authentication.
     if (
       ["GET", "HEAD"].includes(request.method) &&
       ["/", "/index.html", "/__farm-check"].includes(incoming.pathname) &&

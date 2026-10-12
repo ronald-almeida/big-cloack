@@ -6,7 +6,6 @@ import { onRequest } from "../functions/[[path]].js";
 const password = "Uma frase de teste 2026!";
 async function setup() {
   const h = await harness();
-  h.env.AUTH_PASSWORD_PEPPER = "test-only-random-pepper";
   const request = (path, method = "GET", data, headers = {}) =>
     new Request(h.env.ADMIN_ORIGIN + path, {
       method,
@@ -21,12 +20,7 @@ async function setup() {
   const call = (path, method, data, headers) =>
     api.fetch(request(path, method, data, headers), h.env);
   const recover = () =>
-    call(
-      "/access-recovery/api",
-      "POST",
-      { password },
-      { "Cf-Access-Jwt-Assertion": h.jwt },
-    );
+    call("/api/auth/login", "POST", { email: h.env.ADMIN_EMAIL, password });
   return { ...h, request, call, recover };
 }
 test("password login, protected API, logout and hashed storage", async () => {
@@ -116,65 +110,21 @@ test("password login, protected API, logout and hashed storage", async () => {
     h.close();
   }
 });
-test("recovery rejects invalid identity, validates password, revokes previous sessions", async () => {
+test("offline password reset revokes sessions and rejects old password", async () => {
   const h = await setup();
   try {
     const old = (await h.recover()).headers.get("Set-Cookie").split(";")[0];
-    for (const claims of [
-      { email: "other@example.com" },
-      { aud: "wrong" },
-      { exp: 1 },
-    ]) {
-      assert.equal(
-        (
-          await h.call(
-            "/access-recovery/api",
-            "POST",
-            { password },
-            { "Cf-Access-Jwt-Assertion": await h.token(claims) },
-          )
-        ).status,
-        401,
-      );
-    }
-    assert.equal(
-      (
-        await h.call(
-          "/access-recovery/api",
-          "POST",
-          { password: "short" },
-          { "Cf-Access-Jwt-Assertion": h.jwt },
-        )
-      ).status,
-      400,
-    );
-    h.env.RECOVERY_ACCESS_AUD = "recovery-aud";
-    const newPassword = password + "changed";
-    const changed = await h.call(
-      "/access-recovery/api",
-      "POST",
-      { password: newPassword },
-      { "Cf-Access-Jwt-Assertion": await h.token({ aud: "recovery-aud" }) },
-    );
-    assert.equal(changed.status, 200);
+    await h.provision(password + "changed");
     assert.equal(
       (await h.call("/api/links", "GET", undefined, { Cookie: old })).status,
       401,
     );
+    assert.equal((await h.recover()).status, 401);
     assert.equal(
       (
         await h.call("/api/auth/login", "POST", {
           email: h.env.ADMIN_EMAIL,
-          password,
-        })
-      ).status,
-      401,
-    );
-    assert.equal(
-      (
-        await h.call("/api/auth/login", "POST", {
-          email: h.env.ADMIN_EMAIL,
-          password: newPassword,
+          password: password + "changed",
         })
       ).status,
       200,
@@ -183,15 +133,11 @@ test("recovery rejects invalid identity, validates password, revokes previous se
     h.close();
   }
 });
+
 test("login rate limits and cross-origin/alternate-host requests fail closed", async () => {
   const h = await setup();
   try {
-    await h.recover();
-    for (const path of [
-      "/api/auth/login",
-      "/api/auth/logout",
-      "/access-recovery/api",
-    ]) {
+    for (const path of ["/api/auth/login", "/api/auth/logout"]) {
       assert.equal(
         (
           await h.call(
@@ -258,7 +204,7 @@ test("login rate limits and cross-origin/alternate-host requests fail closed", a
     h.close();
   }
 });
-test("Pages gates dashboard, recovery and previews; public login contains no app data", async () => {
+test("Pages gates dashboard and previews; Access headers never authenticate", async () => {
   const h = await setup();
   try {
     const env = { ...h.env, ADMIN_API: { fetch: (r) => api.fetch(r, h.env) } };
@@ -278,9 +224,12 @@ test("Pages gates dashboard, recovery and previews; public login contains no app
     );
     assert.equal((await page("/access-recovery")).status, 303);
     assert.equal(
-      (await page("/access-recovery", { "Cf-Access-Jwt-Assertion": h.jwt }))
-        .status,
-      200,
+      (
+        await page("/access-recovery", {
+          "Cf-Access-Jwt-Assertion": "ignored-legacy-token",
+        })
+      ).status,
+      303,
     );
     const cookie = (await h.recover()).headers.get("Set-Cookie").split(";")[0];
     assert.equal((await page("/", { Cookie: cookie })).status, 200);
@@ -292,6 +241,123 @@ test("Pages gates dashboard, recovery and previews; public login contains no app
           next: async () => new Response("leak"),
         })
       ).status,
+      401,
+    );
+  } finally {
+    h.close();
+  }
+});
+
+test("all administrative route families reject missing sessions and Access-only headers", async () => {
+  const h = await setup();
+  try {
+    for (const path of [
+      "/api/links",
+      "/api/domains",
+      "/api/analytics",
+      "/api/accesses",
+      "/api/cnpj",
+      "/api/farm/sites",
+      "/api/farm/domains",
+      "/api/auth/session",
+      "/api/auth/unknown",
+      "/access-recovery/api",
+    ]) {
+      for (const method of [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "HEAD",
+        "OPTIONS",
+      ]) {
+        const response = await h.call(path, method, undefined, {
+          "Cf-Access-Jwt-Assertion": "formerly-trusted",
+          "Cf-Access-Authenticated-User-Email": h.env.ADMIN_EMAIL,
+        });
+        assert.ok(
+          [401, 405].includes(response.status),
+          `${method} ${path}: ${response.status}`,
+        );
+      }
+    }
+    assert.equal((await h.call("/api/auth/logout", "POST")).status, 401);
+    const env = { ...h.env, ADMIN_API: { fetch: (r) => api.fetch(r, h.env) } };
+    for (const path of [
+      "/",
+      "/farm",
+      "/analytics",
+      "/index.html",
+      "/access-recovery",
+      "/nested/admin",
+    ]) {
+      const r = await onRequest({
+        env,
+        request: h.request(path),
+        next: () => {
+          throw Error("must not serve private page");
+        },
+      });
+      assert.equal(r.status, 303);
+      assert.equal(r.headers.get("Location"), "/login");
+    }
+  } finally {
+    h.close();
+  }
+});
+
+test("tampering, signing-key rotation, credential version, expired Pages session and backend failure deny access", async () => {
+  const h = await setup();
+  try {
+    const raw = (await h.recover()).headers.get("Set-Cookie").split(";")[0];
+    const tampered = raw.slice(0, -1) + (raw.endsWith("a") ? "b" : "a");
+    assert.equal(
+      (await h.call("/api/links", "GET", undefined, { Cookie: tampered }))
+        .status,
+      401,
+    );
+    const oldKey = h.env.AUTH_SESSION_SECRET;
+    h.env.AUTH_SESSION_SECRET = "b".repeat(64);
+    assert.equal(
+      (await h.call("/api/links", "GET", undefined, { Cookie: raw })).status,
+      401,
+    );
+    h.env.AUTH_SESSION_SECRET = oldKey;
+    h.db.exec("UPDATE admin_credentials SET version='rotated'");
+    assert.equal(
+      (await h.call("/api/links", "GET", undefined, { Cookie: raw })).status,
+      401,
+    );
+    const cookie = (await h.recover()).headers.get("Set-Cookie").split(";")[0];
+    h.db.exec("UPDATE admin_sessions SET expires_at=0");
+    const env = { ...h.env, ADMIN_API: { fetch: (r) => api.fetch(r, h.env) } };
+    assert.equal(
+      (
+        await onRequest({
+          env,
+          request: h.request("/", "GET", undefined, { Cookie: cookie }),
+          next: () => new Response("private"),
+        })
+      ).status,
+      303,
+    );
+    env.ADMIN_API.fetch = () => {
+      throw Error("offline");
+    };
+    assert.equal(
+      (
+        await onRequest({
+          env,
+          request: h.request("/"),
+          next: () => new Response("private"),
+        })
+      ).status,
+      503,
+    );
+    delete h.env.AUTH_SESSION_SECRET;
+    assert.equal((await h.recover()).status, 503);
+    assert.equal(
+      (await h.call("/api/links", "GET", undefined, { Cookie: raw })).status,
       401,
     );
   } finally {
