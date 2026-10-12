@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      jose:
-        specifier: latest
-        version: 6.2.12
       lucide-react:
         specifier: latest
         version: 1.47.0(react@19.3.0)
@@ -614,9 +611,6 @@ packages:
   is-fullwidth-code-point@3.0.0:
     resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==}
     engines: {node: '>=8'}
-
-  jose@6.2.12:
-    resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
 
   kleur@4.1.5:
     resolution: {integrity: sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ==}
@@ -1298,8 +1292,6 @@ snapshots:
   get-caller-file@2.0.5: {}
 
   is-fullwidth-code-point@3.0.0: {}
-
-  jose@6.2.12: {}
 
   kleur@4.1.5: {}
 

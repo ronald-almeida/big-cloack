@@ -1,4 +1,4 @@
-// Local-only preview: real API/SQL handlers with ephemeral test JWT and SQLite.
+// Local-only preview: real API/SQL handlers with ephemeral test session and SQLite.
 // This file is never bundled into Workers or Pages deployments.
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";

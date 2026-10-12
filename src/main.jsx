@@ -965,10 +965,5 @@ function App() {
   );
 }
 createRoot(document.getElementById("root")).render(
-  window.location.pathname === "/login" ||
-    window.location.pathname.startsWith("/access-recovery") ? (
-    <Login />
-  ) : (
-    <App />
-  ),
+  window.location.pathname === "/login" ? <Login /> : <App />,
 );
