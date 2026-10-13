@@ -1,5 +1,3 @@
-ALTER TABLE links ADD COLUMN captcha_enabled INTEGER NOT NULL DEFAULT 0;
-
 -- Separate events preserve existing click counts and bot analytics.
 CREATE TABLE captcha_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

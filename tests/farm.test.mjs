@@ -149,7 +149,7 @@ test("farm authenticated lifecycle, BrasilAPI, capacity, HEAD snapshots, rename,
     assert.equal(
       (
         await h.call("farm/sites", "GET", undefined, {
-          "Cf-Access-Jwt-Assertion": "",
+          Cookie: "",
         })
       ).status,
       401,

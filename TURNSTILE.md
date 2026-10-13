@@ -36,13 +36,15 @@ Em 13/10/2026, o widget existente `big-cloack-human-verification`, site key
 `0x4AAAAAAFLke7cUWk_KnJfk`, foi configurado para `agendasilva.com` e
 `rediconta1.com`. A Secret Key foi sincronizada no Worker, a chave pública
 conferida e o `CAPTCHA_SESSION_SECRET` já existente preservado. Nenhuma chave
-está faltando. Isso não publica automaticamente as alterações de código.
+está faltando. API, redirector e painel foram publicados em 13/10/2026.
 
 ## Banco e publicação
 
-A migration `0008_cloak_captcha.sql` adiciona `links.captcha_enabled INTEGER NOT
-NULL DEFAULT 0`, sem alterar as escolhas dos links existentes, e cria a tabela
-separada `captcha_events` e seus índices. Para instalações sem alterações manuais:
+A migration `0008_link_captcha.sql` adiciona `links.captcha_enabled INTEGER NOT
+NULL DEFAULT 0`, sem alterar as escolhas dos links existentes. Ela corresponde
+à migration já registrada em produção desde 02/10/2026. A migration
+`0009_captcha_events.sql` cria a tabela separada `captcha_events` e seus índices.
+Em 13/10/2026, apenas a 0009 estava pendente e foi aplicada pelo Wrangler.
 
 ```sh
 pnpm exec wrangler d1 migrations apply DB --remote -c wrangler.api.jsonc
@@ -52,22 +54,15 @@ pnpm build
 pnpm deploy:panel
 ```
 
-**Atenção ao estado já existente desta conta:** a coluna `captcha_enabled` já
-existe em produção, mas a tabela `captcha_events` não. Não execute cegamente o
-ALTER TABLE novamente. Confira `PRAGMA table_info(links)` e `d1_migrations`;
-aplique apenas os CREATE TABLE/INDEX da migration 0008 quando a coluna já tiver
-tipo INTEGER, NOT NULL e default 0. Depois de verificar toda a estrutura, registre
-`0008_cloak_captcha.sql` em `d1_migrations` se ainda não estiver registrado. Não
-remova colunas, linhas, opções existentes nem migrations anteriores.
+O código foi reconciliado com a autenticação própria já publicada em 12/10/2026:
+cookie administrativo assinado, sem login por Access nem recuperação pública.
+O módulo de senha e todos os módulos Farm do bundle foram comparados com a
+produção e permaneceram idênticos. Os secrets de login não foram trocados e as
+credenciais/sessões existentes foram preservadas. Os scripts de configuração e
+preflight agora correspondem a essa configuração de produção.
 
-**Divergência que precisa ser reconciliada antes do deploy completo:** a API
-publicada usa autenticação própria com sessão assinada (`AUTH_SESSION_SECRET`) e
-sem a rota antiga de recuperação via Access. A branch `main` ainda contém a
-implementação anterior de autenticação. Publicar diretamente a API/Pages de
-`main` reintroduziria esse comportamento antigo. Esta alteração não modifica os
-arquivos de autenticação, o Pages gate nem o Farm BM. Preserve a autenticação
-publicada ao reconciliar o código de implantação antes de executar os comandos
-acima. O novo código de captcha não foi publicado nesta entrega.
+Publicação: API `446b4147-83f9-4727-a49c-1a3bf960c65d`, redirector
+`dd5c2745-add4-4d1c-b127-ed299475c474`, Pages `f404df4f`.
 
 ## Sessão, erros e registros
 
@@ -111,8 +106,17 @@ continua cobrindo Farm BM, login, domínios, analytics e bot detection.
 O formulário foi verificado no navegador local: criar e reabrir um link com
 slug `teste/captcha` mantém a opção ativada.
 
-Esses testes não comprovam uma resolução humana real em produção. Depois da
-reconciliação e publicação, validar em HTTPS em ambos os domínios: off → destino;
+40 testes automatizados passaram após a reconciliação, além do build e dos
+bundles. Em produção foram verificados em ambos os domínios: captcha off →
+redirect, captcha on → página/widget, token inválido → retry, cookie inválido →
+challenge, eventos D1 e preservação dos três bindings. O painel publicado foi
+conferido pelo conteúdo exato do asset, login 200, painel protegido por redirect,
+APIs administrativas/Farm protegidas por 401 e hostname Pages alternativo negado.
+O link temporário e seus eventos de teste foram removidos; os três links reais
+mantiveram id, versão e opção de captcha sem alterações.
+
+Esses testes não comprovam uma resolução humana real em produção. Para essa
+validação manual em HTTPS em ambos os domínios: off → destino;
 on → widget → aprovação → destino; falha → nova tentativa; mesma sessão → sem
 repetição; após cinco minutos/remoção do cookie → novo desafio. Usar link de
 teste, sem alterar as opções de links reais durante a verificação. Chaves de

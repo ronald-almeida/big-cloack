@@ -176,7 +176,7 @@ test("challenge -> Siteverify -> signed cookie -> original device rules; session
     assert.equal(
       (
         await h.call("captcha-events", "GET", undefined, {
-          "Cf-Access-Jwt-Assertion": "bad",
+          Cookie: "bad",
         })
       ).status,
       401,

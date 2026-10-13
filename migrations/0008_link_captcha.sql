@@ -1,0 +1,1 @@
+ALTER TABLE links ADD COLUMN captcha_enabled INTEGER NOT NULL DEFAULT 0;

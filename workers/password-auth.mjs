@@ -28,13 +28,14 @@ function sessionToken(request) {
     .map((s) => s.trim())
     .find((s) => s.startsWith(COOKIE + "="))
     ?.slice(COOKIE.length + 1);
-  return /^[a-f0-9]{64}$/.test(value || "") ? value : null;
+  return /^[a-f0-9]{64}\.[a-f0-9]{64}$/.test(value || "") ? value : null;
 }
 export async function passwordSession(request, env) {
   if (new URL(request.url).origin !== env.ADMIN_ORIGIN)
     throw Error("Acesso negado");
   const token = sessionToken(request);
-  if (!token) throw Error("Sessão necessária");
+  if (!token || !(await validSignature(token, env)))
+    throw Error("Sessão necessária");
   const row = await env.DB.prepare(
     "SELECT s.email FROM admin_sessions s JOIN admin_credentials c ON c.email=s.email AND c.version=s.credential_version WHERE s.token_hash=? AND s.expires_at>?",
   )
@@ -43,7 +44,7 @@ export async function passwordSession(request, env) {
   if (!row || row.email !== email(env)) throw Error("Sessão expirada");
   return { email: row.email, method: "password" };
 }
-async function hashPassword(password, salt, env) {
+export async function hashPassword(password, salt, env) {
   if (!env.AUTH_PASSWORD_PEPPER) throw Error("Login ainda não configurado.");
   const pepper = await crypto.subtle.importKey(
     "raw",
@@ -102,7 +103,8 @@ async function limited(request, env) {
   return false;
 }
 async function issue(env, version) {
-  const token = random();
+  const id = random();
+  const token = id + "." + (await signature(id, env));
   await env.DB.prepare("DELETE FROM admin_sessions WHERE expires_at<=?")
     .bind(now())
     .run();
@@ -115,8 +117,8 @@ async function issue(env, version) {
     "Set-Cookie": cookie(token),
   });
 }
-// All credential creation/recovery requires a verified Access identity, never public signup.
-export async function passwordRoutes(request, env, readBody, verifyAccess) {
+// Credentials are provisioned offline using scripts/admin-password.mjs.
+export async function passwordRoutes(request, env, readBody) {
   const url = new URL(request.url),
     path = url.pathname;
   if (url.origin !== env.ADMIN_ORIGIN)
@@ -136,43 +138,19 @@ export async function passwordRoutes(request, env, readBody, verifyAccess) {
     }
   }
   if (path === "/api/auth/logout" && request.method === "POST") {
+    try {
+      await passwordSession(request, env);
+    } catch {
+      return json({ error: "Entre para continuar." }, 401, {
+        "Set-Cookie": cookie("", 0),
+      });
+    }
     const token = sessionToken(request);
     if (token)
       await env.DB.prepare("DELETE FROM admin_sessions WHERE token_hash=?")
         .bind(await digest(token))
         .run();
     return json({ ok: true }, 200, { "Set-Cookie": cookie("", 0) });
-  }
-  if (path === "/access-recovery/api") {
-    try {
-      await verifyAccess(request, env);
-    } catch {
-      return json(
-        { error: "Confirme seu e-mail administrativo para definir a senha." },
-        401,
-      );
-    }
-    if (request.method === "GET")
-      return json({ email: email(env), recovery: true });
-    const data = await readBody(request);
-    if (
-      typeof data.password !== "string" ||
-      data.password.length < 12 ||
-      data.password.length > 128
-    )
-      return json({ error: "Use uma senha entre 12 e 128 caracteres." }, 400);
-    const salt = random(),
-      version = random();
-    const hash = await hashPassword(data.password, salt, env);
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO admin_credentials(email,password_hash,salt,version,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET password_hash=excluded.password_hash,salt=excluded.salt,version=excluded.version,updated_at=excluded.updated_at",
-      ).bind(email(env), hash, salt, version, now()),
-      env.DB.prepare("DELETE FROM admin_sessions WHERE email=?").bind(
-        email(env),
-      ),
-    ]);
-    return issue(env, version);
   }
   if (path === "/api/auth/login" && request.method === "POST") {
     if (await limited(request, env))
@@ -207,5 +185,27 @@ export async function passwordRoutes(request, env, readBody, verifyAccess) {
       return json({ error: "E-mail ou senha incorretos." }, 401);
     return issue(env, row.version);
   }
+  try {
+    await passwordSession(request, env);
+  } catch {
+    return json({ error: "Entre para continuar." }, 401);
+  }
   return json({ error: "Não encontrado." }, 404);
+}
+
+async function signature(id, env) {
+  if (!/^[a-f0-9]{64}$/.test(env.AUTH_SESSION_SECRET || ""))
+    throw Error("Sessão não configurada");
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(env.AUTH_SESSION_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return hex(await crypto.subtle.sign("HMAC", key, encoder.encode(id)));
+}
+async function validSignature(token, env) {
+  const [id, mac] = token.split(".");
+  return equal(mac, await signature(id, env));
 }

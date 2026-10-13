@@ -58,8 +58,8 @@ test("authenticated CRUD, redirects, analytics, cache invalidation and security"
   const h = await harness();
   try {
     const pageResponse = await onRequest({
-      request: new Request("https://aprovabmyksh.com/access-recovery", {
-        headers: { "Cf-Access-Jwt-Assertion": h.jwt },
+      request: new Request("https://aprovabmyksh.com/", {
+        headers: { Cookie: h.cookie },
       }),
       env: { ...h.env, ADMIN_API: { fetch: (r) => api.fetch(r, h.env) } },
       next: () => new Response("<html>private</html>"),
@@ -89,40 +89,21 @@ test("authenticated CRUD, redirects, analytics, cache invalidation and security"
       ).status,
       401,
     );
-    assert.equal(
-      (
-        await h.call("links", "GET", undefined, {
-          "Cf-Access-Jwt-Assertion": await h.token({
-            email: "other@example.com",
-          }),
-        })
-      ).status,
-      401,
-    );
-    assert.equal(
-      (
-        await h.call("links", "GET", undefined, {
-          "Cf-Access-Jwt-Assertion": await h.token({ aud: "wrong" }),
-        })
-      ).status,
-      401,
-    );
-    assert.equal(
-      (
-        await h.call("links", "GET", undefined, {
-          "Cf-Access-Jwt-Assertion": await h.token({ exp: 1 }),
-        })
-      ).status,
-      401,
-    );
-    assert.equal(
-      (
-        await h.call("links", "GET", undefined, {
-          "Cf-Access-Jwt-Assertion": "invalid-token",
-        })
-      ).status,
-      401,
-    );
+    for (const cookie of [
+      "",
+      "invalid",
+      h.cookie.slice(0, -1) + (h.cookie.endsWith("a") ? "b" : "a"),
+    ]) {
+      assert.equal(
+        (
+          await h.call("links", "GET", undefined, {
+            Cookie: cookie,
+            "Cf-Access-Jwt-Assertion": "ignored",
+          })
+        ).status,
+        401,
+      );
+    }
     assert.equal(
       (
         await h.call(
