@@ -2,25 +2,17 @@ export async function onRequest(context) {
   const url = new URL(context.request.url);
   // Preview hosts never serve the administrative app or its authentication API.
   if (url.origin !== context.env.ADMIN_ORIGIN) {
-    return new Response(
-      "Acesso restrito. Entre pelo domínio administrativo protegido pelo Cloudflare Access.",
-      { status: 401, headers: { "Cache-Control": "no-store" } },
-    );
+    return new Response("Acesso restrito. Entre pelo domínio administrativo.", {
+      status: 401,
+      headers: { "Cache-Control": "no-store" },
+    });
   }
-  if (
-    url.pathname.startsWith("/api/") ||
-    url.pathname === "/access-recovery/api"
-  )
+  if (url.pathname.startsWith("/api/"))
     return context.env.ADMIN_API.fetch(context.request);
   const publicPage =
     url.pathname === "/login" || url.pathname.startsWith("/assets/");
   if (!publicPage) {
-    const check = new URL(
-      url.pathname.startsWith("/access-recovery")
-        ? "/access-recovery/api"
-        : "/api/auth/session",
-      url,
-    );
+    const check = new URL("/api/auth/session", url);
     let auth;
     try {
       auth = await context.env.ADMIN_API.fetch(

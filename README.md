@@ -1,6 +1,9 @@
 # Big Cloak
 
-**Login com senha:** implementação, configuração de publicação e recuperação estão em [LOGIN.md](LOGIN.md). Esse fluxo substitui a exigência de código de e-mail em cada entrada depois da ativação indicada no documento; Cloudflare Access permanece responsável por confirmar o administrador na criação/recuperação da senha. As seções históricas de implantação abaixo descrevem o acesso original.
+**Verificação humana opcional no Cloak:** configuração, sessões, eventos,
+testes e publicação em [TURNSTILE.md](TURNSTILE.md).
+
+**Login com senha:** a autenticação própria publicada usa e-mail e senha, com sessão assinada; configuração em [LOGIN.md](LOGIN.md). As referências a Cloudflare Access nas seções históricas abaixo descrevem o acesso original e não devem ser reaplicadas à configuração atual.
 
 Gerenciador de links nativo Cloudflare: painel React no Pages, API Worker privada via service binding, Worker público de redirects, banco D1 e cache KV. Sem Supabase, Lovable ou serviço externo de QR Code.
 

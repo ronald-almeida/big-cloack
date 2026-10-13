@@ -2,11 +2,12 @@
   "name": "big-cloack-redirect",
   "main": "workers/redirect.mjs",
   "compatibility_date": "2026-09-24",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "preview_urls": false,
+  "vars": {
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFLke7cUWk_KnJfk"
+  },
   "observability": {
     "enabled": true
   },
