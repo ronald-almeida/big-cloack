@@ -1,5 +1,8 @@
 # Big Cloak
 
+**Verificação humana opcional no Cloak:** configuração, sessões, eventos,
+testes e cuidados com a divergência entre repositório e produção em [TURNSTILE.md](TURNSTILE.md).
+
 **Login com senha:** implementação, configuração de publicação e recuperação estão em [LOGIN.md](LOGIN.md). Esse fluxo substitui a exigência de código de e-mail em cada entrada depois da ativação indicada no documento; Cloudflare Access permanece responsável por confirmar o administrador na criação/recuperação da senha. As seções históricas de implantação abaixo descrevem o acesso original.
 
 Gerenciador de links nativo Cloudflare: painel React no Pages, API Worker privada via service binding, Worker público de redirects, banco D1 e cache KV. Sem Supabase, Lovable ou serviço externo de QR Code.

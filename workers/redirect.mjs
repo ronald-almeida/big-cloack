@@ -1,4 +1,5 @@
 import { recordTraffic } from "./traffic.mjs";
+import { captchaGate } from "./captcha.mjs";
 import { deviceType, destinationMode } from "./rules.mjs";
 import { renderWaitingPage } from "./waiting-page.mjs";
 export default {
@@ -10,7 +11,7 @@ export default {
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
     };
-    if (!["GET", "HEAD"].includes(request.method))
+    if (!["GET", "HEAD", "POST"].includes(request.method))
       return new Response("Método não permitido", { status: 405, headers });
     try {
       const domain = await env.DB.prepare(
@@ -20,7 +21,7 @@ export default {
         .first();
       if (!domain)
         return new Response("Domínio não cadastrado", { status: 404, headers });
-      if (url.pathname === "/__domain-check")
+      if (url.pathname === "/__domain-check" && request.method !== "POST")
         return Response.json(
           { service: "big-cloack-redirect", domain_id: domain.id },
           { headers },
@@ -52,6 +53,12 @@ export default {
         ctx.waitUntil(
           env.CACHE.put(key, JSON.stringify(link), { expirationTtl: 3600 }),
         );
+      }
+      if (link.captcha_enabled === 1) {
+        const challenge = await captchaGate(request, env, ctx, link);
+        if (challenge) return challenge;
+      } else if (request.method === "POST") {
+        return new Response("Método não permitido", { status: 405, headers });
       }
       const device = deviceType(request.headers),
         mode = destinationMode(link, device),

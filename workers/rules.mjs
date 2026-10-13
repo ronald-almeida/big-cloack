@@ -38,10 +38,19 @@ export function validateLink(input) {
     .trim()
     .toLowerCase();
   if (
-    !/^[a-z0-9][a-z0-9_-]{2,63}$/.test(slug) ||
+    slug.length < 3 ||
+    slug.length > 64 ||
+    !/^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/.test(slug) ||
     ["api", "health", "__domain-check"].includes(slug)
   )
-    throw new Error("Slug: use 3 a 64 letras, números, hífen ou sublinhado.");
+    throw new Error(
+      "Slug: use 3 a 64 letras, números, hífen ou sublinhado; / pode separar segmentos.",
+    );
+  if (
+    input.captcha_enabled !== undefined &&
+    ![0, 1, false, true].includes(input.captcha_enabled)
+  )
+    throw new Error("Verificação humana inválida.");
   if (
     !["real", "waiting"].includes(input.mode) ||
     !["all", "mobile", "desktop"].includes(input.device)
@@ -54,6 +63,7 @@ export function validateLink(input) {
     throw new Error("O modo Real precisa de ao menos uma URL.");
   return {
     name,
+    captcha_enabled: Number(input.captcha_enabled || 0),
     slug,
     mode: input.mode,
     device: input.device,

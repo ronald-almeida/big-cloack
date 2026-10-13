@@ -134,7 +134,7 @@ export default {
         )
           throw new Error("Domínio de cadastro inválido.");
         await env.DB.prepare(
-          "INSERT INTO links(id,slug,name,mode,device,real_urls,waiting_url,waiting_page,version,domain_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO links(id,slug,name,mode,device,real_urls,waiting_url,waiting_page,version,domain_id,captcha_enabled) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         )
           .bind(
             id,
@@ -147,15 +147,27 @@ export default {
             JSON.stringify(l.waiting_page),
             crypto.randomUUID(),
             domainId,
+            l.captcha_enabled,
           )
           .run();
         return json({ id, ...l, domain_id: domainId }, 201);
       }
       const match = path.match(/^\/api\/links\/([a-f0-9-]+)$/);
       if (match && request.method === "PUT") {
-        const l = validateLink(await body(request));
+        const input = await body(request);
+        // Older panel clients must not silently disable an enabled challenge.
+        if (input.captcha_enabled === undefined) {
+          const current = await env.DB.prepare(
+            "SELECT captcha_enabled FROM links WHERE id=?",
+          )
+            .bind(match[1])
+            .first();
+          if (!current) return json({ error: "Link não encontrado." }, 404);
+          input.captcha_enabled = current.captcha_enabled;
+        }
+        const l = validateLink(input);
         const r = await env.DB.prepare(
-          "UPDATE links SET slug=?,name=?,mode=?,device=?,real_urls=?,waiting_url=?,waiting_page=?,version=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+          "UPDATE links SET slug=?,name=?,mode=?,device=?,real_urls=?,waiting_url=?,waiting_page=?,version=?,captcha_enabled=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
         )
           .bind(
             l.slug,
@@ -166,6 +178,7 @@ export default {
             l.waiting_url,
             JSON.stringify(l.waiting_page),
             crypto.randomUUID(),
+            l.captcha_enabled,
             match[1],
           )
           .run();
@@ -234,6 +247,49 @@ export default {
         if (dm[2] === "/connect")
           return json(await connectDomain(env, domain, await body(request)));
         return json(await verifyDomain(env, domain));
+      }
+      if (path === "/api/captcha-events" && request.method === "GET") {
+        const range = period(u.searchParams);
+        const conditions = ["created_at>=?", "created_at<?"],
+          params = [range.from, range.to];
+        for (const [query, column] of [
+          ["link", "link_id"],
+          ["hostname", "hostname"],
+        ]) {
+          const value = u.searchParams.get(query);
+          if (value) {
+            conditions.push(`${column}=?`);
+            params.push(value);
+          }
+        }
+        const where = conditions.join(" AND ");
+        const totals = await env.DB.prepare(
+          `SELECT event,COUNT(*) total FROM captcha_events WHERE ${where} GROUP BY event`,
+        )
+          .bind(...params)
+          .all();
+        const cursor = u.searchParams.get("cursor");
+        if (cursor) {
+          if (
+            !/^[1-9]\d*$/.test(cursor) ||
+            !Number.isSafeInteger(Number(cursor))
+          )
+            throw new Error("Página inválida.");
+          conditions.push("id<?");
+          params.push(Number(cursor));
+        }
+        const { results } = await env.DB.prepare(
+          `SELECT * FROM captcha_events WHERE ${conditions.join(" AND ")} ORDER BY id DESC LIMIT 51`,
+        )
+          .bind(...params)
+          .all();
+        const items = results.slice(0, 50);
+        return json({
+          items,
+          totals: totals.results,
+          next_cursor: results.length > 50 ? String(items.at(-1).id) : null,
+          ...range,
+        });
       }
       if (path === "/api/logs" && request.method === "GET") {
         const conditions = [],

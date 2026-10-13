@@ -27,6 +27,7 @@ import {
 import QRCode from "qrcode";
 import WaitingEditor from "./WaitingEditor.jsx";
 import AccessLogs from "./AccessLogs.jsx";
+import CaptchaEvents from "./CaptchaEvents.jsx";
 import "./style.css";
 const empty = {
   name: "",
@@ -35,6 +36,7 @@ const empty = {
   device: "all",
   real_urls: [],
   waiting_url: "",
+  captcha_enabled: 0,
   waiting_page: { theme: "sky" },
 };
 async function api(path, method = "GET", body) {
@@ -590,6 +592,11 @@ function App() {
           )}
           {page === "Analytics" && (
             <>
+              <CaptchaEvents
+                request={api}
+                rangeQuery={rangeQuery}
+                link={filter}
+              />
               <section className="table-card padded">
                 <h2>Classificação de tráfego</h2>
                 <div className="logs-filters">
@@ -848,6 +855,26 @@ function App() {
                     ? "Todos os dispositivos vão para Real."
                     : `Somente ${editor.device} vai para Real. Os demais vão para Espera.`}
               </div>
+              <label>
+                Verificação humana / Captcha
+                <select
+                  aria-label="Verificação humana"
+                  value={editor.captcha_enabled || 0}
+                  onChange={(e) =>
+                    setEditor({
+                      ...editor,
+                      captcha_enabled: Number(e.target.value),
+                    })
+                  }
+                >
+                  <option value={0}>Desativada</option>
+                  <option value={1}>Ativada</option>
+                </select>
+                <small>
+                  Solicita verificação antes de abrir o link. Após confirmar,
+                  não repete por cinco minutos neste link e domínio.
+                </small>
+              </label>
               <label>
                 URLs reais{" "}
                 <span>Uma por linha · distribuição aleatória uniforme</span>
