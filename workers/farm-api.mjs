@@ -1,6 +1,7 @@
 import { farmThemes, farmSlug } from "../shared/farm.mjs";
-import { normalizeCnpj } from "./cnpj.mjs";
+import { normalizeFarmCnpj as normalizeCnpj } from "../shared/companies.mjs";
 import { lookupFarmCnpj } from "./farm-cnpj.mjs";
+import { companiesAPI } from "./farm-companies.mjs";
 import {
   farmZone,
   bindFarm,
@@ -37,6 +38,7 @@ function data(input) {
     uf: text(d.uf, 2).toUpperCase(),
     telefone: text(d.telefone, 25).replace(/\D/g, ""),
     email: text(d.email, 160),
+    cnae: text(d.cnae, 7),
   };
   if (!result.razao) throw Error("Informe a razão social.");
   if (!farmThemes.some((t) => t.id === input.theme))
@@ -172,6 +174,8 @@ export async function farmAPI(request, env, readBody) {
     p = u.pathname,
     m = request.method;
   try {
+    if (p.startsWith("/api/farm/companies/"))
+      return companiesAPI(request, env, readBody);
     if (p === "/api/farm/themes" && m === "GET") return json(farmThemes);
     if (p === "/api/farm/cnpj" && m === "GET")
       return json(await lookupFarmCnpj(u.searchParams.get("cnpj")));
@@ -308,7 +312,7 @@ export async function farmAPI(request, env, readBody) {
         id = crypto.randomUUID();
       if (input.domain_id)
         await env.DB.prepare(
-          "INSERT INTO farm_sites(id,domain_id,subdomain,company,cnpj,data,theme,head) VALUES(?,?,?,?,?,?,?,?)",
+          "INSERT INTO farm_sites(id,domain_id,subdomain,company,cnpj,data,theme,head,company_reservation_token) VALUES(?,?,?,?,?,?,?,?,?)",
         )
           .bind(
             id,
@@ -319,11 +323,12 @@ export async function farmAPI(request, env, readBody) {
             JSON.stringify(v.data),
             v.theme,
             v.head,
+            input.reservation_token || null,
           )
           .run();
       else {
         const r = await env.DB.prepare(
-          "INSERT INTO farm_sites(id,domain_id,subdomain,company,cnpj,data,theme,head) SELECT ?,d.id,?,?,?,?,?,? FROM farm_domains d WHERE d.active=1 AND d.zone_status='active' AND (d.site_limit IS NULL OR (SELECT COUNT(*) FROM farm_sites s WHERE s.domain_id=d.id)<d.site_limit) AND NOT EXISTS(SELECT 1 FROM farm_sites s WHERE s.domain_id=d.id AND s.subdomain=?) ORDER BY (SELECT COUNT(*) FROM farm_sites s WHERE s.domain_id=d.id),d.created_at,d.id LIMIT 1",
+          "INSERT INTO farm_sites(id,domain_id,subdomain,company,cnpj,data,theme,head,company_reservation_token) SELECT ?,d.id,?,?,?,?,?,?,? FROM farm_domains d WHERE d.active=1 AND d.zone_status='active' AND (d.site_limit IS NULL OR (SELECT COUNT(*) FROM farm_sites s WHERE s.domain_id=d.id)<d.site_limit) AND NOT EXISTS(SELECT 1 FROM farm_sites s WHERE s.domain_id=d.id AND s.subdomain=?) ORDER BY (SELECT COUNT(*) FROM farm_sites s WHERE s.domain_id=d.id),d.created_at,d.id LIMIT 1",
         )
           .bind(
             id,
@@ -333,6 +338,7 @@ export async function farmAPI(request, env, readBody) {
             JSON.stringify(v.data),
             v.theme,
             v.head,
+            input.reservation_token || null,
             v.subdomain,
           )
           .run();
@@ -474,7 +480,11 @@ export async function farmAPI(request, env, readBody) {
   } catch (e) {
     let message = e.message,
       status = 400;
-    if (message.includes("FARM_CAPACITY")) {
+    if (message.includes("FARM_RESERVATION_INVALID")) {
+      message =
+        "Reserva expirada, alterada ou CNPJ não está ativo. Volte à busca e selecione novamente.";
+      status = 409;
+    } else if (message.includes("FARM_CAPACITY")) {
       message = "Domínio atingiu o limite de sites.";
       status = 409;
     } else if (message.includes("FARM_DOMAIN_INACTIVE"))

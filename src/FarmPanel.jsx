@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { farmThemes, farmSlug } from "../shared/farm.mjs";
 import "./farm.css";
+import FarmCompanies, { CompanyDetails } from "./FarmCompanies.jsx";
+import { companyAge } from "../shared/companies.mjs";
 const blank = () => ({
   data: {
     cnpj: "",
@@ -26,6 +28,8 @@ const labels = {
 };
 const date = (v) => (v ? new Date(v).toLocaleString("pt-BR") : "—");
 export default function FarmPanel({ request }) {
+  const [verification, setVerification] = useState(null);
+  const [companyDetails, setCompanyDetails] = useState(null);
   const [tab, setTab] = useState("Sites"),
     [sites, setSites] = useState([]),
     [domains, setDomains] = useState([]),
@@ -70,7 +74,24 @@ export default function FarmPanel({ request }) {
       setBusy(false);
     }
   }
-  function edit(site) {
+  async function releaseSelection() {
+    if (form.reservation_token && !form.id)
+      await request(
+        "farm/companies/company/" + form.data.cnpj + "/release",
+        "POST",
+        { reservation_token: form.reservation_token },
+      );
+  }
+  async function edit(site) {
+    if (form.reservation_token && !form.id) {
+      try {
+        await releaseSelection();
+      } catch (e) {
+        setError(e.message);
+        return;
+      }
+    }
+    setVerification(null);
     setForm(site ? { ...site, data: { ...site.data } } : blank());
     setManualSlug(!!site);
     setPreview("");
@@ -80,6 +101,7 @@ export default function FarmPanel({ request }) {
     setNotice("");
   }
   function field(key, value) {
+    if (key === "cnpj") setVerification(null);
     setForm((old) => {
       const data = { ...old.data, [key]: value };
       return {
@@ -140,7 +162,7 @@ export default function FarmPanel({ request }) {
   return (
     <section className="farm-module" aria-label="Farm BM">
       <div className="farm-tabs" aria-label="Áreas do Farm">
-        {["Sites", "Criar Site", "Domínios Farm"].map((t) => (
+        {["Sites", "Buscar CNPJs", "Criar Site", "Domínios Farm"].map((t) => (
           <button
             key={t}
             disabled={busy}
@@ -148,7 +170,9 @@ export default function FarmPanel({ request }) {
             className={tab === t ? "primary" : ""}
             onClick={() =>
               t === "Criar Site"
-                ? edit(null)
+                ? form.reservation_token && !form.id
+                  ? setTab(t)
+                  : edit(null)
                 : (setTab(t), setHeadSite(null), setHistory(null))
             }
           >
@@ -170,6 +194,49 @@ export default function FarmPanel({ request }) {
         <p role="status">Carregando Farm BM…</p>
       ) : (
         <>
+          <div hidden={tab !== "Buscar CNPJs"}>
+            <FarmCompanies
+              request={request}
+              onBusy={setBusy}
+              onSelect={async (selected) => {
+                try {
+                  await releaseSelection();
+                } catch (e) {
+                  await request(
+                    "farm/companies/company/" +
+                      selected.company.cnpj +
+                      "/release",
+                    "POST",
+                    { reservation_token: selected.reservation_token },
+                  );
+                  throw e;
+                }
+                setForm({
+                  ...blank(),
+                  data: selected.data,
+                  reservation_token: selected.reservation_token,
+                  reserved_until: selected.reserved_until,
+                  subdomain: farmSlug(
+                    selected.data.fantasia || selected.data.razao,
+                  ),
+                });
+                setVerification(selected.company);
+                setPreview("");
+                setManualSlug(false);
+                setError("");
+                setNotice(
+                  "CNPJ ativo e reservado por 30 minutos. Revise os dados e publique o site.",
+                );
+                setTab("Criar Site");
+              }}
+            />
+          </div>
+          {companyDetails && (
+            <CompanyDetails
+              company={companyDetails}
+              onClose={() => setCompanyDetails(null)}
+            />
+          )}
           {tab === "Sites" && (
             <>
               <div className="farm-heading">
@@ -448,6 +515,7 @@ export default function FarmPanel({ request }) {
                     <input
                       required
                       value={form.data.cnpj}
+                      readOnly={!!form.reservation_token && !form.id}
                       onChange={(e) => field("cnpj", e.target.value)}
                       placeholder="00.000.000/0000-00"
                       maxLength={18}
@@ -455,6 +523,7 @@ export default function FarmPanel({ request }) {
                   </label>
                   <button
                     type="button"
+                    disabled={!!form.reservation_token && !form.id}
                     onClick={() =>
                       run(async () => {
                         const result = await request(
@@ -481,7 +550,60 @@ export default function FarmPanel({ request }) {
                   >
                     Buscar CNPJ
                   </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      run(async () => {
+                        const c = await request(
+                          "farm/companies/company/" +
+                            encodeURIComponent(
+                              form.data.cnpj.replace(/[.\/-\s]/g, ""),
+                            ) +
+                            "/verify",
+                          "POST",
+                          {},
+                        );
+                        setVerification(c);
+                        setCompanyDetails(c);
+                        setNotice(
+                          c.status_code === 2
+                            ? "CNPJ ativo na consulta online."
+                            : "CNPJ " +
+                                c.situacao +
+                                ". Não use este cadastro para criar um novo site.",
+                        );
+                      })
+                    }
+                  >
+                    Verificar CNPJ
+                  </button>
                 </div>
+                {verification && (
+                  <p role="status">
+                    Status atual: <strong>{verification.situacao}</strong> ·
+                    Verificado em: {date(verification.verified_at)} · Abertura:{" "}
+                    {verification.abertura} · Tempo de empresa:{" "}
+                    {companyAge(verification.abertura)}
+                  </p>
+                )}
+                {form.reservation_token && !form.id && (
+                  <p>
+                    Reservado até {date(form.reserved_until)}.{" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        run(async () => {
+                          await releaseSelection();
+                          setForm(blank());
+                          setVerification(null);
+                          setTab("Buscar CNPJs");
+                        })
+                      }
+                    >
+                      Liberar reserva e voltar à busca
+                    </button>
+                  </p>
+                )}
                 <div className="farm-grid">
                   {[
                     ["razao", "Razão social"],
@@ -608,7 +730,17 @@ export default function FarmPanel({ request }) {
                   >
                     Pré-visualizar estilo
                   </button>
-                  <button type="button" onClick={() => setTab("Sites")}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      run(async () => {
+                        await releaseSelection();
+                        setForm(blank());
+                        setVerification(null);
+                        setTab("Sites");
+                      })
+                    }
+                  >
                     Cancelar
                   </button>
                 </div>

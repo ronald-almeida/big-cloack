@@ -5,13 +5,27 @@ import { readFile } from "node:fs/promises";
 import { resolve, extname } from "node:path";
 import { harness } from "../tests/harness.mjs";
 import farmPublic from "../workers/farm-public.mjs";
+import { companyFixture, onlineFixture } from "../tests/company-fixture.mjs";
 const h = await harness(),
   original = globalThis.fetch,
   bindings = new Map();
+const companies = companyFixture();
+h.env.COMPANY_SEARCH_URL = "https://company-search.example";
+h.env.COMPANY_SEARCH_TOKEN = "local-only";
+h.db.exec(
+  "INSERT INTO farm_domains(id,hostname,active,zone_status) VALUES('preview-domain','farm-test.example',1,'active')",
+);
 h.env.CLOUDFLARE_API_TOKEN = "local-only";
 h.env.CLOUDFLARE_ACCOUNT_ID = "a".repeat(32);
 globalThis.fetch = async (url, options = {}) => {
   const u = new URL(String(url));
+  if (u.hostname === "company-search.example") {
+    try {
+      return Response.json(companies.run(u.pathname, JSON.parse(options.body)));
+    } catch (e) {
+      return Response.json({ error: e.message }, { status: e.status || 400 });
+    }
+  }
   if (u.hostname === "api.cloudflare.com") {
     let result = [];
     if (u.pathname.endsWith("/zones"))
@@ -36,7 +50,10 @@ globalThis.fetch = async (url, options = {}) => {
       );
     return Response.json({ success: true, result });
   }
-  if (u.hostname === "brasilapi.com.br")
+  if (u.hostname === "brasilapi.com.br") {
+    const id = u.pathname.split("/").at(-1);
+    if (id !== "53749174000118")
+      return Response.json(onlineFixture(companies.run("/company/" + id)));
     return Response.json({
       cnpj: "53749174000118",
       razao_social: "Empresa Demonstração LTDA",
@@ -45,7 +62,10 @@ globalThis.fetch = async (url, options = {}) => {
       uf: "BA",
       cnae_fiscal_descricao: "Serviços profissionais",
       ddd_telefone_1: "71999999999",
+      situacao_cadastral: 2,
+      data_inicio_atividade: "2026-01-01",
     });
+  }
   if (
     u.hostname.endsWith(".farm-test.example") ||
     u.pathname === "/__farm-check"
