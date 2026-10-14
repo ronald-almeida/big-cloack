@@ -11,7 +11,7 @@ const farmPublic = {
       return new Response("Método não permitido", { status: 405, headers });
     try {
       const site = await env.DB.prepare(
-        "SELECT s.*,d.hostname FROM farm_sites s JOIN farm_domains d ON d.id=s.domain_id WHERE s.subdomain||'.'||d.hostname=? AND d.active=1 AND s.published_data IS NOT NULL",
+        "SELECT s.*,d.hostname FROM farm_sites s JOIN farm_domains d ON d.id=s.domain_id WHERE (CASE WHEN s.publish_mode='root' THEN d.hostname ELSE s.subdomain||'.'||d.hostname END)=? AND d.active=1 AND s.published_data IS NOT NULL",
       )
         .bind(url.hostname)
         .first();
@@ -53,3 +53,4 @@ export default farmPublic;
 export function tryFarmPublic(request, env) {
   return farmPublic.fetch(request, env, { fallthrough: true });
 }
+
