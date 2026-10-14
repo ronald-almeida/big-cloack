@@ -1,3 +1,4 @@
+import { farmHostname } from "../shared/farm.mjs";
 const service = "big-cloack-api";
 export async function farmCF(env, path, method = "GET", data) {
   if (
@@ -51,7 +52,7 @@ export async function farmZone(env, hostname, create = false) {
   return zone;
 }
 export async function bindFarm(env, site, domain) {
-  const hostname = site.subdomain + "." + domain.hostname;
+  const hostname = farmHostname(site, domain);
   const bindings = await farmCF(
     env,
     base(env) + "?" + new URLSearchParams({ hostname }),
@@ -60,7 +61,7 @@ export async function bindFarm(env, site, domain) {
   if (existing) {
     if (existing.service !== service)
       throw Error(
-        "Este endereço pertence a outro serviço. Escolha outro subdomínio.",
+        "Este endereço pertence a outro serviço. Escolha outro endereço.",
       );
     return existing;
   }
@@ -73,7 +74,7 @@ export async function bindFarm(env, site, domain) {
   );
   if (records.length)
     throw Error(
-      "Já existe um registro DNS neste endereço. Escolha outro subdomínio.",
+      "Já existe um registro DNS neste endereço. Escolha outro endereço.",
     );
   return farmCF(env, base(env), "PUT", {
     hostname,
@@ -83,7 +84,15 @@ export async function bindFarm(env, site, domain) {
   });
 }
 export async function unbindFarm(env, site, domain) {
-  const hostname = site.subdomain + "." + domain.hostname;
+  if (site.publish_mode === "root") {
+    const owner = await env.DB.prepare(
+      "SELECT s.id FROM farm_sites s JOIN farm_domains d ON d.id=s.domain_id WHERE d.hostname=? AND s.publish_mode='root' AND s.published_data IS NOT NULL",
+    )
+      .bind(domain.hostname)
+      .first();
+    if (owner && owner.id !== site.id) return;
+  }
+  const hostname = farmHostname(site, domain);
   const bindings = await farmCF(
     env,
     base(env) + "?" + new URLSearchParams({ hostname }),
@@ -102,7 +111,7 @@ export async function unbindFarm(env, site, domain) {
 export async function verifyFarm(site, domain) {
   try {
     const response = await fetch(
-      "https://" + site.subdomain + "." + domain.hostname + "/__farm-check",
+      "https://" + farmHostname(site, domain) + "/__farm-check",
       {
         redirect: "manual",
         signal: AbortSignal.timeout(8000),
@@ -120,3 +129,4 @@ export async function verifyFarm(site, domain) {
     return false;
   }
 }
+
