@@ -88,6 +88,219 @@ async function domain(h, hostname = "farm-example.com", site_limit = 2) {
   assert.equal(r.status, 201, await r.clone().text());
   return r.json();
 }
+
+test("root publication, conflict, explicit replacement, limits and final URLs", async () => {
+  const h = await setup();
+  try {
+    const d = await domain(h, "root-example.com", 3);
+    const create = async (extra) => {
+      const r = await h.call(
+        "farm/sites",
+        "POST",
+        input({ domain_id: d.id, ...extra }),
+      );
+      assert.equal(r.status, 201, await r.clone().text());
+      return (await r.json()).id;
+    };
+    const a = await create({
+      publish_mode: "root",
+      subdomain: undefined,
+      head: '<meta name="root-head" content="yes">',
+    });
+    assert.equal(
+      h.db.prepare("SELECT subdomain FROM farm_sites WHERE id=?").get(a)
+        .subdomain,
+      null,
+    );
+    let r = await h.call(`farm/sites/${a}/publish`, "POST", {});
+    assert.equal(r.status, 200, await r.clone().text());
+    assert.equal((await r.json()).url, "https://root-example.com/");
+    assert.ok(h.bindings.has("root-example.com"));
+    const publicRoot = () =>
+      farmPublic.fetch(new Request("https://root-example.com/"), h.env);
+    assert.match(await (await publicRoot()).text(), /root-head/);
+    let domains = await (await h.call("farm/domains")).json();
+    assert.equal(domains[0].root_site_id, a);
+    assert.equal(domains[0].root_company, company.fantasia);
+    assert.equal(domains[0].site_count, 1);
+    assert.equal(domains[0].subdomain_count, 0);
+    const b = await create({
+      publish_mode: "root",
+      data: { ...company, fantasia: "Outra Empresa" },
+    });
+    r = await h.call(`farm/sites/${b}/publish`, "POST", {});
+    assert.equal(r.status, 409);
+    assert.match((await r.json()).error, /em uso por Empresa Teste/);
+    assert.match(await (await publicRoot()).text(), /root-head/);
+    r = await h.call(`farm/sites/${b}/publish`, "POST", {
+      replace_root_site_id: a,
+      replace_root_version: 999,
+    });
+    assert.equal(r.status, 409);
+    h.state.fail = true;
+    r = await h.call(`farm/sites/${b}/publish`, "POST", {
+      replace_root_site_id: a,
+      replace_root_version: 1,
+    });
+    assert.equal(r.status, 400);
+    assert.match(await (await publicRoot()).text(), /root-head/);
+    h.state.fail = false;
+    r = await h.call(`farm/sites/${b}/publish`, "POST", {
+      replace_root_site_id: a,
+      replace_root_version: 1,
+    });
+    assert.equal(r.status, 200, await r.clone().text());
+    assert.match(await (await publicRoot()).text(), /Outra Empresa/);
+    assert.doesNotMatch(await (await publicRoot()).text(), /root-head/);
+    assert.equal(h.bindings.size, 1);
+    assert.equal(
+      h.db.prepare("SELECT status FROM farm_sites WHERE id=?").get(a).status,
+      "draft",
+    );
+    assert.equal(
+      (await h.call(`farm/sites/${a}/publish`, "POST", {})).status,
+      409,
+    );
+    const sub = await create({ subdomain: "empresa" });
+    r = await h.call(`farm/sites/${sub}/publish`, "POST", {});
+    assert.equal((await r.json()).url, "https://empresa.root-example.com/");
+    assert.equal(
+      (
+        await farmPublic.fetch(
+          new Request("https://empresa.root-example.com/"),
+          h.env,
+        )
+      ).status,
+      200,
+    );
+    domains = await (await h.call("farm/domains")).json();
+    assert.equal(domains[0].site_count, 3);
+    assert.equal(domains[0].subdomain_count, 1);
+    assert.equal(domains[0].root_site_id, b);
+    assert.equal(
+      (
+        await h.call(
+          "farm/sites",
+          "POST",
+          input({ domain_id: d.id, subdomain: "excess" }),
+        )
+      ).status,
+      409,
+    );
+    assert.equal((await h.call(`farm/sites/${a}`, "DELETE")).status, 200);
+    assert.ok(h.bindings.has("root-example.com"));
+    assert.equal((await publicRoot()).status, 200);
+    assert.equal(
+      (await h.call(`farm/sites/${b}/publish`, "POST", {})).status,
+      200,
+    );
+    assert.equal((await h.call(`farm/sites/${b}`, "DELETE")).status, 200);
+    assert.equal((await publicRoot()).status, 404);
+    assert.equal(
+      (await (await h.call("farm/domains")).json())[0].root_site_id,
+      null,
+    );
+    assert.equal(h.db.prepare("SELECT COUNT(*) n FROM domains").get().n, 0);
+  } finally {
+    h.close();
+  }
+});
+
+test("root concurrency, migration guards, automatic subdomains and mode changes", async () => {
+  const h = await setup();
+  try {
+    const d = await domain(h, "root-move.com", null);
+    assert.equal(
+      (await h.call("farm/sites", "POST", input({ publish_mode: "root" })))
+        .status,
+      400,
+    );
+    assert.equal(
+      (await h.call("farm/sites", "POST", input({ publish_mode: "invalid" })))
+        .status,
+      400,
+    );
+    const auto = await (await h.call("farm/sites", "POST", input())).json();
+    assert.equal(
+      h.db
+        .prepare("SELECT publish_mode FROM farm_sites WHERE id=?")
+        .get(auto.id).publish_mode,
+      "subdomain",
+    );
+    const ids = [];
+    for (let i = 0; i < 2; i++)
+      ids.push(
+        (
+          await (
+            await h.call(
+              "farm/sites",
+              "POST",
+              input({ domain_id: d.id, publish_mode: "root" }),
+            )
+          ).json()
+        ).id,
+      );
+    const results = await Promise.all(
+      ids.map((id) => h.call(`farm/sites/${id}/publish`, "POST", {})),
+    );
+    assert.equal(results.filter((r) => r.status === 200).length, 1);
+    const owner = h.db
+      .prepare(
+        "SELECT * FROM farm_sites WHERE publish_mode='root' AND published_data IS NOT NULL",
+      )
+      .get();
+    const other = ids.find((id) => id !== owner.id);
+    assert.throws(
+      () =>
+        h.db
+          .prepare("UPDATE farm_sites SET published_data=data WHERE id=?")
+          .run(other),
+      /UNIQUE/,
+    );
+    assert.throws(
+      () =>
+        h.db
+          .prepare("UPDATE farm_sites SET subdomain='invalid' WHERE id=?")
+          .run(other),
+      /CHECK/,
+    );
+    let r = await h.call(
+      `farm/sites/${owner.id}`,
+      "PUT",
+      input({ domain_id: d.id, subdomain: "moved", publish_mode: "subdomain" }),
+    );
+    assert.equal(r.status, 200, await r.clone().text());
+    assert.ok(!h.bindings.has("root-move.com"));
+    assert.equal(
+      (await h.call(`farm/sites/${owner.id}/publish`, "POST", {})).status,
+      200,
+    );
+    assert.ok(h.bindings.has("moved.root-move.com"));
+    r = await h.call(
+      `farm/sites/${owner.id}`,
+      "PUT",
+      input({ domain_id: d.id, publish_mode: "root", subdomain: null }),
+    );
+    assert.equal(r.status, 200, await r.clone().text());
+    assert.equal(
+      (await h.call(`farm/sites/${owner.id}/publish`, "POST", {})).status,
+      200,
+    );
+    assert.ok(h.bindings.has("root-move.com"));
+    assert.ok(!h.bindings.has("moved.root-move.com"));
+    const sites = await (await h.call("farm/sites")).json();
+    assert.equal(
+      sites.find((s) => s.id === owner.id).url,
+      "https://root-move.com/",
+    );
+    const history = await (
+      await h.call(`farm/sites/${owner.id}/history`)
+    ).json();
+    assert.ok(history.some((r) => r.hostname === "root-move.com"));
+  } finally {
+    h.close();
+  }
+});
 test("Farm outbound requests reject redirects without following them or forwarding credentials", async () => {
   const h = await setup();
   try {
@@ -403,3 +616,4 @@ test("database guards simultaneous capacity, inactive domains, failures and retr
     h.close();
   }
 });
+
