@@ -90,3 +90,13 @@ export function farmSlug(value) {
     .slice(0, 63)
     .replace(/-+$/, "");
 }
+
+export function farmHostname(site, domain) {
+  return site.publish_mode === "root"
+    ? domain.hostname
+    : site.subdomain + "." + domain.hostname;
+}
+export function farmUrl(site, domain) {
+  return "https://" + farmHostname(site, domain) + "/";
+}
+
