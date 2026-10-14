@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { farmThemes, farmSlug } from "../shared/farm.mjs";
+import { farmThemes, farmSlug, farmHostname } from "../shared/farm.mjs";
 import "./farm.css";
 const blank = () => ({
   data: {
@@ -15,6 +15,7 @@ const blank = () => ({
   },
   theme: "id01",
   subdomain: "",
+  publish_mode: "subdomain",
   domain_id: "",
   head: "",
 });
@@ -92,9 +93,44 @@ export default function FarmPanel({ request }) {
     });
     setPreview("");
   }
+  async function rootConfirmation(site) {
+    if (site.publish_mode !== "root") return {};
+    const freshDomains = await request("farm/domains");
+    const domain = freshDomains.find((d) => d.id === site.domain_id);
+    if (!domain?.root_site_id) return {};
+    if (domain.root_site_id === site.id) {
+      return window.confirm(
+        "Republicar o site de " +
+          (site.data.fantasia || site.data.razao) +
+          " em https://" +
+          domain.hostname +
+          "/? O conteúdo publicado será atualizado.",
+      )
+        ? {}
+        : null;
+    }
+    if (
+      !window.confirm(
+        "Domínio raiz em uso por " +
+          domain.root_company +
+          ". Substituir o site em https://" +
+          domain.hostname +
+          "/ por " +
+          (site.data.fantasia || site.data.razao) +
+          "? O site anterior ficará como rascunho, continuará contando no limite e deixará de ser servido neste endereço.",
+      )
+    )
+      return null;
+    return {
+      replace_root_site_id: domain.root_site_id,
+      replace_root_version: domain.root_version,
+    };
+  }
   async function save(e) {
     e.preventDefault();
     await run(async () => {
+      const confirmation = await rootConfirmation(form);
+      if (!confirmation) return;
       let id = form.id;
       if (id) await request("farm/sites/" + id, "PUT", form);
       else {
@@ -106,7 +142,7 @@ export default function FarmPanel({ request }) {
         const result = await request(
           "farm/sites/" + id + "/publish",
           "POST",
-          {},
+          confirmation,
         );
         setNotice(
           result.status === "published"
@@ -121,11 +157,13 @@ export default function FarmPanel({ request }) {
   }
   async function publish(site) {
     await run(async () => {
+      const confirmation = await rootConfirmation(site);
+      if (!confirmation) return;
       try {
         const r = await request(
           "farm/sites/" + site.id + "/publish",
           "POST",
-          {},
+          confirmation,
         );
         setNotice(
           r.status === "published"
@@ -202,6 +240,8 @@ export default function FarmPanel({ request }) {
                   onSubmit={(e) => {
                     e.preventDefault();
                     run(async () => {
+                      const confirmation = await rootConfirmation(headSite);
+                      if (!confirmation) return;
                       await request(
                         "farm/sites/" + headSite.id + "/head",
                         "PUT",
@@ -211,7 +251,7 @@ export default function FarmPanel({ request }) {
                         await request(
                           "farm/sites/" + headSite.id + "/publish",
                           "POST",
-                          {},
+                          confirmation,
                         );
                         setNotice("HEAD salvo e publicação enviada.");
                         setHeadSite(null);
@@ -264,8 +304,12 @@ export default function FarmPanel({ request }) {
                     history.rows.map((r) => (
                       <p key={r.id}>
                         {date(r.created_at)} ·{" "}
-                        {r.action === "delete" ? "Exclusão" : "Publicação"} ·{" "}
-                        {labels[r.status] || r.status} · {r.message}
+                        {r.action === "delete"
+                          ? "Exclusão"
+                          : r.action === "replace"
+                            ? "Substituição"
+                            : "Publicação"}{" "}
+                        · {labels[r.status] || r.status} · {r.message}
                       </p>
                     ))
                   ) : (
@@ -308,7 +352,7 @@ export default function FarmPanel({ request }) {
                               target="_blank"
                               rel="noopener noreferrer"
                             >
-                              {s.subdomain}.{s.hostname}
+                              {farmHostname(s, s)}
                             </a>
                             <small>Domínio: {s.hostname}</small>
                           </td>
@@ -341,6 +385,7 @@ export default function FarmPanel({ request }) {
                                 disabled={busy}
                                 onClick={() =>
                                   setHeadSite({
+                                    ...s,
                                     id: s.id,
                                     company: s.company,
                                     head: s.head,
@@ -530,17 +575,34 @@ export default function FarmPanel({ request }) {
                     </label>
                   ))}
                 </div>
+                <label>
+                  Publicação
+                  <select
+                    value={form.publish_mode}
+                    onChange={(e) =>
+                      setForm({ ...form, publish_mode: e.target.value })
+                    }
+                  >
+                    <option value="subdomain">Subdomínio</option>
+                    <option value="root">Domínio raiz</option>
+                  </select>
+                </label>
                 <div className="farm-grid">
                   <label>
-                    Distribuição
+                    {form.publish_mode === "root"
+                      ? "Domínio raiz"
+                      : "Distribuição"}
                     <select
+                      required={form.publish_mode === "root"}
                       value={form.domain_id}
                       onChange={(e) =>
                         setForm({ ...form, domain_id: e.target.value })
                       }
                     >
                       <option value="">
-                        Automática — domínio com menos sites
+                        {form.publish_mode === "root"
+                          ? "Selecione um domínio"
+                          : "Automática — subdomínio no domínio com menos sites"}
                       </option>
                       {domains.map((d) => (
                         <option
@@ -556,31 +618,46 @@ export default function FarmPanel({ request }) {
                           {d.hostname} · {d.site_count}/
                           {d.site_limit ?? "sem limite"}
                           {!d.active ? " · inativo" : ""}
+                          {form.publish_mode === "root"
+                            ? d.root_site_id
+                              ? " · Em uso por " + d.root_company
+                              : " · Livre"
+                            : ""}
                         </option>
                       ))}
                     </select>
                   </label>
-                  <label>
-                    Subdomínio
-                    <input
-                      required
-                      maxLength={63}
-                      pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                      value={form.subdomain}
-                      onChange={(e) => {
-                        setManualSlug(true);
-                        setForm({
-                          ...form,
-                          subdomain: e.target.value.toLowerCase(),
-                        });
-                      }}
-                    />
-                  </label>
+                  {form.publish_mode !== "root" && (
+                    <label>
+                      Subdomínio
+                      <input
+                        required
+                        maxLength={63}
+                        pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                        value={form.subdomain || ""}
+                        onChange={(e) => {
+                          setManualSlug(true);
+                          setForm({
+                            ...form,
+                            subdomain: e.target.value.toLowerCase(),
+                          });
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
                 <p className="farm-address">
-                  https://{form.subdomain || "empresa"}.
+                  https://
+                  {form.publish_mode === "root"
+                    ? ""
+                    : (form.subdomain || "empresa") + "."}
                   {domains.find((d) => d.id === form.domain_id)?.hostname ||
                     "domínio escolhido automaticamente"}
+                  /
+                </p>
+                <p>
+                  O site raiz conta como 1 site no limite. A distribuição
+                  automática sempre usa subdomínio.
                 </p>
                 {form.id && (
                   <p>
@@ -694,6 +771,13 @@ export default function FarmPanel({ request }) {
                     <div>
                       <h3>{d.hostname}</h3>
                       <p>
+                        Domínio raiz:{" "}
+                        {d.root_site_id
+                          ? "Em uso por " + d.root_company
+                          : "Livre"}{" "}
+                        · {d.subdomain_count} sites em subdomínios
+                      </p>
+                      <p>
                         {d.active ? "Ativo" : "Inativo"} · {d.site_count}/
                         {d.site_limit ?? "sem limite"} sites · Cloudflare:{" "}
                         {d.zone_status}
@@ -770,7 +854,7 @@ export default function FarmPanel({ request }) {
                   <small>
                     Desativar suspende os sites deste domínio. O limite
                     considera todos os sites cadastrados, inclusive rascunhos e
-                    publicações pendentes.
+                    publicações pendentes. Cada site raiz conta como 1 site.
                   </small>
                 </div>
               ))}
@@ -782,3 +866,4 @@ export default function FarmPanel({ request }) {
     </section>
   );
 }
+
