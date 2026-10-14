@@ -1,4 +1,9 @@
-import { farmThemes, farmSlug } from "../shared/farm.mjs";
+import {
+  farmThemes,
+  farmSlug,
+  farmHostname,
+  farmUrl,
+} from "../shared/farm.mjs";
 import { normalizeCnpj } from "./cnpj.mjs";
 import { lookupFarmCnpj } from "./farm-cnpj.mjs";
 import {
@@ -41,13 +46,20 @@ function data(input) {
   if (!result.razao) throw Error("Informe a razão social.");
   if (!farmThemes.some((t) => t.id === input.theme))
     throw Error("Escolha um dos 20 estilos.");
-  const subdomain = text(
-    input.subdomain || farmSlug(result.fantasia || result.razao),
-    63,
-  ).toLowerCase();
+  const publish_mode = input.publish_mode ?? "subdomain";
+  if (!["root", "subdomain"].includes(publish_mode))
+    throw Error("Modo de publicação inválido.");
+  const subdomain =
+    publish_mode === "root"
+      ? null
+      : text(
+          input.subdomain || farmSlug(result.fantasia || result.razao),
+          63,
+        ).toLowerCase();
   if (
-    !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(subdomain) ||
-    ["www", "api", "admin", "mail", "ftp"].includes(subdomain)
+    publish_mode === "subdomain" &&
+    (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(subdomain) ||
+      ["www", "api", "admin", "mail", "ftp"].includes(subdomain))
   )
     throw Error("Subdomínio inválido ou reservado.");
   if (typeof input.head !== "undefined" && typeof input.head !== "string")
@@ -57,6 +69,7 @@ function data(input) {
   return {
     data: result,
     subdomain,
+    publish_mode,
     theme: input.theme,
     head: input.head || "",
     company: result.fantasia || result.razao,
@@ -76,7 +89,7 @@ async function getDomain(env, id) {
   if (!d) throw Error("Domínio Farm não encontrado.");
   return d;
 }
-async function lock(env, id, fn) {
+async function lock(env, id, fn, targetId) {
   const op = crypto.randomUUID(),
     now = Date.now();
   const r = await env.DB.prepare(
@@ -86,9 +99,40 @@ async function lock(env, id, fn) {
     .run();
   if (!r.meta.changes)
     throw Error("Site em processamento. Aguarde e tente novamente.");
+  const lockedDomains = [];
   try {
-    return await fn(await getSite(env, id));
+    const site = await getSite(env, id);
+    const pending = site.pending_address
+      ? JSON.parse(site.pending_address)
+      : null;
+    const previousDomain = pending
+      ? await env.DB.prepare("SELECT id FROM farm_domains WHERE hostname=?")
+          .bind(pending.hostname)
+          .first()
+      : null;
+    for (const domainId of [
+      ...new Set(
+        [site.domain_id, targetId, previousDomain?.id].filter(Boolean),
+      ),
+    ].sort()) {
+      const acquired = await env.DB.prepare(
+        "UPDATE farm_domains SET operation_id=?,operation_until=? WHERE id=? AND operation_until<?",
+      )
+        .bind(op, now + 180000, domainId, now)
+        .run();
+      if (!acquired.meta.changes)
+        throw Error("Domínio em processamento. Aguarde e tente novamente.");
+      lockedDomains.push(domainId);
+    }
+    return await fn(site);
   } finally {
+    for (const domainId of lockedDomains) {
+      await env.DB.prepare(
+        "UPDATE farm_domains SET operation_id=NULL,operation_until=0 WHERE id=? AND operation_id=?",
+      )
+        .bind(domainId, op)
+        .run();
+    }
     await env.DB.prepare(
       "UPDATE farm_sites SET operation_id=NULL,operation_until=0 WHERE id=? AND operation_id=?",
     )
@@ -104,7 +148,7 @@ async function history(env, s, d, action, status, message = "") {
       crypto.randomUUID(),
       s.id,
       s.company,
-      s.subdomain + "." + d.hostname,
+      farmHostname(s, d),
       action,
       status,
       s.version,
@@ -120,10 +164,31 @@ async function cleanupAddress(env, s) {
     .bind(s.id)
     .run();
 }
-async function publish(env, s) {
+async function publish(env, s, input = {}) {
   const d = await getDomain(env, s.domain_id);
   if (!d.active || d.zone_status !== "active")
     throw Error("Ative o domínio Farm antes de publicar.");
+  const occupant =
+    s.publish_mode === "root"
+      ? await env.DB.prepare(
+          "SELECT * FROM farm_sites WHERE domain_id=? AND publish_mode='root' AND published_data IS NOT NULL AND id<>?",
+        )
+          .bind(d.id, s.id)
+          .first()
+      : null;
+  if (
+    occupant &&
+    (input.replace_root_site_id !== occupant.id ||
+      input.replace_root_version !== occupant.published_version)
+  ) {
+    const error = Error(
+      "Domínio raiz em uso por " +
+        occupant.company +
+        ". Confirme explicitamente a substituição antes de publicar.",
+    );
+    error.status = 409;
+    throw error;
+  }
   try {
     await cleanupAddress(env, s);
     renderFarm(JSON.parse(s.data), s.theme, s.head);
@@ -133,11 +198,28 @@ async function publish(env, s) {
       .bind(s.id)
       .run();
     const binding = await bindFarm(env, s, d);
-    await env.DB.prepare(
-      `UPDATE farm_sites SET cloudflare_domain_id=?,published_data=data,published_theme=theme,published_head=head,published_version=version,status='provisioning',last_error='',published_at=${nowSQL} WHERE id=?`,
-    )
-      .bind(binding.id, s.id)
-      .run();
+    const updates = [];
+    if (occupant)
+      updates.push(
+        env.DB.prepare(
+          "UPDATE farm_sites SET published_data=NULL,published_theme=NULL,published_head=NULL,published_version=NULL,cloudflare_domain_id='',status='draft' WHERE id=?",
+        ).bind(occupant.id),
+      );
+    updates.push(
+      env.DB.prepare(
+        `UPDATE farm_sites SET cloudflare_domain_id=?,published_data=data,published_theme=theme,published_head=head,published_version=version,status='provisioning',last_error='',published_at=${nowSQL} WHERE id=?`,
+      ).bind(binding.id, s.id),
+    );
+    await env.DB.batch(updates);
+    if (occupant)
+      await history(
+        env,
+        occupant,
+        d,
+        "replace",
+        "success",
+        "Domínio raiz transferido para " + s.company,
+      );
     const fresh = await getSite(env, s.id),
       verified = await verifyFarm(fresh, d);
     const status = verified ? "published" : "provisioning";
@@ -155,7 +237,7 @@ async function publish(env, s) {
     return {
       id: s.id,
       status,
-      url: "https://" + s.subdomain + "." + d.hostname,
+      url: farmUrl(s, d),
     };
   } catch (error) {
     await env.DB.prepare(
@@ -183,7 +265,7 @@ export async function farmAPI(request, env, readBody) {
       return json(
         (
           await env.DB.prepare(
-            "SELECT d.*,COUNT(s.id) AS site_count FROM farm_domains d LEFT JOIN farm_sites s ON s.domain_id=d.id GROUP BY d.id ORDER BY d.created_at DESC",
+            "SELECT d.*,COUNT(s.id) AS site_count,SUM(CASE WHEN s.publish_mode='subdomain' THEN 1 ELSE 0 END) AS subdomain_count,MAX(CASE WHEN s.publish_mode='root' AND s.published_data IS NOT NULL THEN s.id END) AS root_site_id,MAX(CASE WHEN s.publish_mode='root' AND s.published_data IS NOT NULL THEN s.company END) AS root_company,MAX(CASE WHEN s.publish_mode='root' AND s.published_data IS NOT NULL THEN s.published_version END) AS root_version FROM farm_domains d LEFT JOIN farm_sites s ON s.domain_id=d.id GROUP BY d.id ORDER BY d.created_at DESC",
           ).all()
         ).results.map((d) => ({
           ...d,
@@ -297,7 +379,7 @@ export async function farmAPI(request, env, readBody) {
           }) => ({
             ...s,
             data: JSON.parse(s.data),
-            url: "https://" + s.subdomain + "." + s.hostname,
+            url: farmUrl(s, s),
           }),
         ),
       );
@@ -306,9 +388,13 @@ export async function farmAPI(request, env, readBody) {
       const input = await readBody(request),
         v = data(input),
         id = crypto.randomUUID();
+      if (v.publish_mode === "root" && !input.domain_id)
+        throw Error(
+          "Escolha o domínio raiz. A distribuição automática usa somente subdomínios.",
+        );
       if (input.domain_id)
         await env.DB.prepare(
-          "INSERT INTO farm_sites(id,domain_id,subdomain,company,cnpj,data,theme,head) VALUES(?,?,?,?,?,?,?,?)",
+          "INSERT INTO farm_sites(id,domain_id,subdomain,company,cnpj,data,theme,head,publish_mode) VALUES(?,?,?,?,?,?,?,?,?)",
         )
           .bind(
             id,
@@ -319,6 +405,7 @@ export async function farmAPI(request, env, readBody) {
             JSON.stringify(v.data),
             v.theme,
             v.head,
+            v.publish_mode,
           )
           .run();
       else {
@@ -358,8 +445,10 @@ export async function farmAPI(request, env, readBody) {
               .all()
           ).results,
         );
-      if (action === "publish" && m === "POST")
-        return json(await lock(env, id, (s) => publish(env, s)));
+      if (action === "publish" && m === "POST") {
+        const input = await readBody(request);
+        return json(await lock(env, id, (s) => publish(env, s, input)));
+      }
       if (action === "verify" && m === "POST")
         return json(
           await lock(env, id, async (s) => {
@@ -395,63 +484,73 @@ export async function farmAPI(request, env, readBody) {
         const input = await readBody(request),
           v = data(input);
         return json(
-          await lock(env, id, async (s) => {
-            await cleanupAddress(env, s);
-            const d = await getDomain(env, s.domain_id),
-              target = input.domain_id
-                ? await getDomain(env, input.domain_id)
-                : d;
-            const moving = target.id !== d.id || s.subdomain !== v.subdomain;
-            if (moving) {
-              const count = await env.DB.prepare(
-                "SELECT COUNT(*) AS n FROM farm_sites WHERE domain_id=?",
+          await lock(
+            env,
+            id,
+            async (s) => {
+              await cleanupAddress(env, s);
+              const d = await getDomain(env, s.domain_id),
+                target = input.domain_id
+                  ? await getDomain(env, input.domain_id)
+                  : d;
+              const moving =
+                target.id !== d.id ||
+                s.subdomain !== v.subdomain ||
+                s.publish_mode !== v.publish_mode;
+              if (moving) {
+                const count = await env.DB.prepare(
+                  "SELECT COUNT(*) AS n FROM farm_sites WHERE domain_id=?",
+                )
+                  .bind(target.id)
+                  .first();
+                if (
+                  !target.active ||
+                  target.zone_status !== "active" ||
+                  (target.id !== d.id &&
+                    target.site_limit !== null &&
+                    count.n >= target.site_limit)
+                )
+                  throw Error("Domínio inativo ou sem capacidade.");
+                const duplicate = await env.DB.prepare(
+                  "SELECT id FROM farm_sites WHERE domain_id=? AND subdomain=? AND id<>?",
+                )
+                  .bind(target.id, v.subdomain, id)
+                  .first();
+                if (duplicate) throw Error("Este subdomínio já está em uso.");
+              }
+              const pending =
+                moving && (s.cloudflare_domain_id || s.status !== "draft")
+                  ? JSON.stringify({
+                      hostname: d.hostname,
+                      subdomain: s.subdomain,
+                      publish_mode: s.publish_mode,
+                      cloudflare_domain_id: s.cloudflare_domain_id,
+                    })
+                  : null;
+              await env.DB.prepare(
+                `UPDATE farm_sites SET domain_id=?,subdomain=?,publish_mode=?,company=?,cnpj=?,data=?,theme=?,head=?,version=version+1,updated_at=${nowSQL},pending_address=?,cloudflare_domain_id=CASE WHEN ? THEN '' ELSE cloudflare_domain_id END,published_data=CASE WHEN ? THEN NULL ELSE published_data END,status=CASE WHEN ? THEN 'draft' ELSE status END WHERE id=?`,
               )
-                .bind(target.id)
-                .first();
-              if (
-                !target.active ||
-                target.zone_status !== "active" ||
-                (target.id !== d.id &&
-                  target.site_limit !== null &&
-                  count.n >= target.site_limit)
-              )
-                throw Error("Domínio inativo ou sem capacidade.");
-              const duplicate = await env.DB.prepare(
-                "SELECT id FROM farm_sites WHERE domain_id=? AND subdomain=? AND id<>?",
-              )
-                .bind(target.id, v.subdomain, id)
-                .first();
-              if (duplicate) throw Error("Este subdomínio já está em uso.");
-            }
-            const pending =
-              moving && (s.cloudflare_domain_id || s.status !== "draft")
-                ? JSON.stringify({
-                    hostname: d.hostname,
-                    subdomain: s.subdomain,
-                    cloudflare_domain_id: s.cloudflare_domain_id,
-                  })
-                : null;
-            await env.DB.prepare(
-              `UPDATE farm_sites SET domain_id=?,subdomain=?,company=?,cnpj=?,data=?,theme=?,head=?,version=version+1,updated_at=${nowSQL},pending_address=?,cloudflare_domain_id=CASE WHEN ? THEN '' ELSE cloudflare_domain_id END,published_data=CASE WHEN ? THEN NULL ELSE published_data END,status=CASE WHEN ? THEN 'draft' ELSE status END WHERE id=?`,
-            )
-              .bind(
-                target.id,
-                v.subdomain,
-                v.company,
-                v.data.cnpj,
-                JSON.stringify(v.data),
-                v.theme,
-                v.head,
-                pending,
-                moving ? 1 : 0,
-                moving ? 1 : 0,
-                moving ? 1 : 0,
-                id,
-              )
-              .run();
-            if (pending) await cleanupAddress(env, await getSite(env, id));
-            return { ok: true };
-          }),
+                .bind(
+                  target.id,
+                  v.subdomain,
+                  v.publish_mode,
+                  v.company,
+                  v.data.cnpj,
+                  JSON.stringify(v.data),
+                  v.theme,
+                  v.head,
+                  pending,
+                  moving ? 1 : 0,
+                  moving ? 1 : 0,
+                  moving ? 1 : 0,
+                  id,
+                )
+                .run();
+              if (pending) await cleanupAddress(env, await getSite(env, id));
+              return { ok: true };
+            },
+            input.domain_id,
+          ),
         );
       }
       if (!action && m === "DELETE")
@@ -473,7 +572,7 @@ export async function farmAPI(request, env, readBody) {
     return json({ error: "Rota Farm não encontrada." }, 404);
   } catch (e) {
     let message = e.message,
-      status = 400;
+      status = e.status || 400;
     if (message.includes("FARM_CAPACITY")) {
       message = "Domínio atingiu o limite de sites.";
       status = 409;
@@ -487,3 +586,4 @@ export async function farmAPI(request, env, readBody) {
     return json({ error: message }, status);
   }
 }
+
