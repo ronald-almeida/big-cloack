@@ -120,7 +120,13 @@ Após alterar os bindings, gere os tipos com `pnpm exec wrangler types -c wrangl
 
 ## Saúde dos domínios e períodos
 
-Hoje, Últimos 7 dias, Últimos 30 dias e Personalizado usam o fuso do navegador, incluindo o dia final. Os agrupamentos diários usam UTC.
+Hoje, Ontem, Últimos 7 dias, Últimos 30 dias e Personalizado usam o fuso do navegador, incluindo o dia final. Os últimos 7/30 dias incluem hoje; Ontem termina à meia-noite de hoje. Máximo inclui todo o histórico disponível, sem o limite de 366 dias do intervalo personalizado. Os agrupamentos diários do gráfico continuam em UTC, conforme o rótulo na tela.
+
+Os contadores de cada link, o resumo, o histórico e as métricas de domínio respeitam o período selecionado. A coluna de links mostra “Acessos no período”; em Máximo, mostra “Acessos totais”. São contagens de acessos GET/HEAD, incluindo automação, e não de pessoas únicas.
+
+O painel consulta os dados ao abrir e a cada 5 segundos após a consulta anterior, sem recarregar a página. Mostra o horário da última atualização bem-sucedida, preserva os dados e indica falhas de conexão, retoma ao voltar à aba ou recuperar a conexão e cancela respostas de filtros antigos. O histórico mantém as páginas já abertas e busca páginas intermediárias quando chegam mais de 50 novos acessos. Abas ocultas pausam as consultas recorrentes. A latência inclui o tempo de gravação do acesso e de resposta da API.
+
+Publicação desta alteração: API primeiro, depois build e painel Pages. Não requer migration nem mudança no redirector. A API mantém contadores acumulados em `/api/links` sem parâmetros para clientes antigos; novos clientes enviam `from`/`to` ou `period=all`.
 
 Tempo desde o primeiro acesso e dias com acessos não representam disponibilidade contínua. Criações e exclusões usam o domínio de cadastro escolhido ao criar o link; acessos usam o hostname visitado. Links continuam disponíveis nos demais domínios ativos.
 

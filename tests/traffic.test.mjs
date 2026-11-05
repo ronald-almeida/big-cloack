@@ -204,12 +204,15 @@ test("D1 migration, persistence, frequency, API filters, aggregates, cursors and
         400,
       );
     }
+    // SQLite and JS wall clocks can differ slightly on Windows. Seed the burst
+    // just before the request, within the 60-second window, never in its future.
+    const burstTime = new Date(Date.now() - 1000).toISOString();
     for (let i = 0; i < 101; i++) {
       h.db
         .prepare(
-          "INSERT INTO clicks(link_id,hostname,device,destination,country,ip) VALUES(?, 'links.example.com','desktop','real','XX','203.0.113.2')",
+          "INSERT INTO clicks(link_id,hostname,device,destination,country,ip,created_at) VALUES(?, 'links.example.com','desktop','real','XX','203.0.113.2',?)",
         )
-        .run(link.id);
+        .run(link.id, burstTime);
     }
     await visit({ "cf-connecting-ip": "203.0.113.2" });
     logs = await (await h.call("logs?classification=probable_bot")).json();

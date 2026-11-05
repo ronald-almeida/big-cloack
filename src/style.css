@@ -1481,3 +1481,33 @@ footer,
   max-height: 280px;
   overflow: auto;
 }
+
+.live-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #526075;
+  font-size: 12px;
+  margin: 8px 0 18px;
+}
+.live-status > span:last-child:not(.live-dot) {
+  margin-left: 8px;
+}
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22a06b;
+}
+.live-dot.error,
+.live-dot.offline {
+  background: #bd5b1a;
+}
+.live-dot.updating,
+.live-dot.paused {
+  background: #8491a5;
+}
+.logs-card > .live-status {
+  margin-left: 24px;
+}

@@ -1,6 +1,13 @@
 export function period(params) {
   const from = params.get("from"),
     to = params.get("to");
+  if (params.get("period") === "all") {
+    if (from || to) throw new Error("Máximo não aceita datas adicionais.");
+    return {
+      from: "0000-01-01T00:00:00.000Z",
+      to: new Date(Date.now() + 1).toISOString(),
+    };
+  }
   if (from || to) {
     const a = Date.parse(from),
       b = Date.parse(to);

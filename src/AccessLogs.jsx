@@ -1,6 +1,8 @@
+import useLiveQuery, { getJSON } from "./useLiveQuery.js";
+import LiveStatus from "./LiveStatus.jsx";
 import TrafficFilters from "./TrafficFilters.jsx";
 import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { RefreshCw, Smartphone, Monitor, Clock3 } from "lucide-react";
 export default function AccessLogs({
   links,
@@ -11,78 +13,64 @@ export default function AccessLogs({
   trafficFilters = {},
 }) {
   const [filters, setFilters] = useState({
-      link: "",
-      device: "",
-      destination: "",
-      hostname: "",
-    }),
-    [items, setItems] = useState([]),
-    [cursor, setCursor] = useState(null),
-    [loading, setLoading] = useState(true),
-    [error, setError] = useState(""),
-    [reload, setReload] = useState(0);
-  const request = useRef(null);
+    link: "",
+    device: "",
+    destination: "",
+    hostname: "",
+  });
+  const more = useRef(null);
+  const query = new URLSearchParams(rangeQuery);
+  for (const [key, value] of Object.entries({ ...filters, ...trafficFilters }))
+    if (value) query.set(key, value);
+  if (hostname) query.set("hostname", hostname);
+  if (linkFilter) query.set("link", linkFilter);
+  const queryKey = query.toString();
+  const live = useLiveQuery(
+    queryKey,
+    async (signal, previous) => {
+      const page = (cursor) =>
+        getJSON(
+          "/api/logs?" + queryKey + (cursor ? "&cursor=" + cursor : ""),
+          signal,
+        );
+      if (more.current === queryKey && previous?.next_cursor) {
+        more.current = null;
+        const next = await page(previous.next_cursor);
+        return { ...next, items: [...previous.items, ...next.items] };
+      }
+      more.current = null;
+      let latest = await page(null);
+      const fresh = [...latest.items];
+      // Catch every intervening page after a burst or a background tab, then
+      // keep older pages the user already opened and their pagination cursor.
+      const newest = previous?.items[0]?.id;
+      while (newest && latest.next_cursor && latest.items.at(-1).id > newest) {
+        latest = await page(latest.next_cursor);
+        fresh.push(...latest.items);
+      }
+      if (!newest) return latest;
+      const merged = new Map(
+        [...(previous?.items || []), ...fresh].map((item) => [item.id, item]),
+      );
+      const oldestPrevious = previous.items.at(-1).id;
+      const reachedOlder = fresh.at(-1)?.id <= oldestPrevious;
+      return {
+        items: [...merged.values()].sort((a, b) => b.id - a.id),
+        next_cursor: reachedOlder ? latest.next_cursor : previous.next_cursor,
+      };
+    },
+    Boolean(rangeQuery),
+  );
+  const items = live.data?.items || [],
+    cursor = live.data?.next_cursor,
+    loading = live.loading || live.status === "updating",
+    error = live.error;
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const format = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
     timeStyle: "medium",
     timeZone: timezone,
   });
-  async function load(next, signal) {
-    setLoading(true);
-    setError("");
-    try {
-      const query = new URLSearchParams(rangeQuery);
-      for (const [key, value] of Object.entries({
-        ...filters,
-        ...trafficFilters,
-      }))
-        if (value)
-          query.set(
-            key,
-            ["from", "to"].includes(key)
-              ? new Date(value).toISOString()
-              : value,
-          );
-      if (hostname) query.set("hostname", hostname);
-      if (linkFilter) query.set("link", linkFilter);
-      if (next) query.set("cursor", next);
-      const res = await fetch("/api/logs?" + query, { signal });
-      if (!res.headers.get("content-type")?.includes("application/json"))
-        throw new Error("Atualize a página para entrar novamente.");
-      const data = await res.json();
-      if (!res.ok)
-        throw new Error(data.error || "Não foi possível carregar os acessos.");
-      if (!signal.aborted) {
-        setItems((previous) =>
-          next ? [...previous, ...data.items] : data.items,
-        );
-        setCursor(data.next_cursor);
-      }
-    } catch (e) {
-      if (!signal.aborted) setError(e.message);
-    } finally {
-      if (!signal.aborted) setLoading(false);
-    }
-  }
-  useEffect(() => {
-    const controller = new AbortController();
-    request.current = controller;
-    setItems([]);
-    setCursor(null);
-    if (rangeQuery) load(null, controller.signal);
-    else setLoading(false);
-    return () => controller.abort();
-  }, [
-    filters,
-    reload,
-    rangeQuery,
-    hostname,
-    linkFilter,
-    trafficFilters.classification,
-    trafficFilters.bot_provider,
-    trafficFilters.request_method,
-  ]);
   const change = (key, value) => setFilters({ ...filters, [key]: value });
   return (
     <section className="table-card logs-card">
@@ -93,15 +81,12 @@ export default function AccessLogs({
             Cada abertura de link, do acesso mais recente para o mais antigo.
           </p>
         </div>
-        <button
-          className="secondary"
-          disabled={loading}
-          onClick={() => setReload((x) => x + 1)}
-        >
+        <button className="secondary" disabled={loading} onClick={live.refresh}>
           <RefreshCw size={15} />
           Atualizar
         </button>
       </div>
+      {rangeQuery && <LiveStatus {...live} />}
       <div className="logs-filters">
         {!Object.keys(trafficFilters).length && (
           <TrafficFilters filters={filters} onChange={change} />
@@ -282,7 +267,10 @@ export default function AccessLogs({
           cursor && (
             <button
               className="secondary"
-              onClick={() => load(cursor, request.current.signal)}
+              onClick={() => {
+                more.current = queryKey;
+                live.refresh();
+              }}
             >
               Carregar mais
             </button>
