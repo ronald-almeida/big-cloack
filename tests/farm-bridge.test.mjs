@@ -232,7 +232,7 @@ test("publication, root replacement guard and unpublish use the existing Farm bi
         } else if (options.method === "DELETE") {
           for (const [host, b] of bindings)
             if (u.pathname.endsWith(b.id)) bindings.delete(host);
-          return new Response(null, {status:204});
+          return new Response(null, {status:200});
         } else
           result = [...bindings.values()].filter(
             (b) => b.hostname === u.searchParams.get("hostname"),
