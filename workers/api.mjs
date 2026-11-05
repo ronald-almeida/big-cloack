@@ -1,6 +1,7 @@
 import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import { lookupCnpj } from "./cnpj.mjs";
 import { farmAPI } from "./farm-api.mjs";
+import { farmBridge, bridgePath } from "./farm-bridge.mjs";
 import { tryFarmPublic } from "./farm-public.mjs";
 import {
   cloudflareConfigured,
@@ -69,6 +70,9 @@ function decodeTraffic(row) {
 export default {
   async fetch(request, env) {
     const incoming = new URL(request.url);
+    if (incoming.pathname === bridgePath) return farmBridge(request, env, body);
+    if (incoming.pathname.startsWith('/api/farm/') && env.FARM_LEGACY_MODE === 'disabled')
+      return json({ error: 'A Farm BM agora é administrada no BIG OPERAÇÃO.' }, 410);
     if (incoming.pathname.startsWith("/api/auth/")) {
       try {
         return await passwordRoutes(request, env, body);

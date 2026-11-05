@@ -13,7 +13,10 @@
   "vars": {
     "ADMIN_EMAIL": "ronald.almeida307@gmail.com",
     "ADMIN_ORIGIN": "https://aprovabmyksh.com",
-    "CLOUDFLARE_ACCOUNT_ID": "a0b4f2bd488fb248fa164b2b86ef0973"
+    "CLOUDFLARE_ACCOUNT_ID": "a0b4f2bd488fb248fa164b2b86ef0973",
+    "FARM_BRIDGE_MODE": "write",
+    "FARM_LEGACY_MODE": "disabled",
+    "FARM_OPERACAO_ORIGIN": "https://big-operacao.vercel.app"
   },
   "d1_databases": [
     {

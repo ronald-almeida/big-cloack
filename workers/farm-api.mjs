@@ -249,7 +249,17 @@ async function publish(env, s, input = {}) {
     throw error;
   }
 }
-export async function farmAPI(request, env, readBody) {
+export async function unpublishFarm(env, id) {
+  return lock(env, id, async s => {
+    await cleanupAddress(env, s);
+    const d = await getDomain(env, s.domain_id);
+    if (s.published_data || s.cloudflare_domain_id) await unbindFarm(env, s, d);
+    await env.DB.prepare("UPDATE farm_sites SET published_data=NULL,published_theme=NULL,published_head=NULL,published_version=NULL,cloudflare_domain_id='',status='draft',last_error='' WHERE id=?").bind(id).run();
+    await history(env, s, d, 'unpublish', 'success');
+    return { id, status:'draft' };
+  });
+}
+export async function farmAPI(request, env, readBody, operation = {}) {
   const u = new URL(request.url),
     p = u.pathname,
     m = request.method;
@@ -285,7 +295,7 @@ export async function farmAPI(request, env, readBody) {
         throw Error(
           "Use um domínio separado dos domínios do Cloak e do painel.",
         );
-      const id = crypto.randomUUID();
+      const id = operation.id || crypto.randomUUID();
       await env.DB.prepare(
         "INSERT INTO farm_domains(id,hostname,site_limit) VALUES(?,?,?)",
       )
@@ -387,7 +397,7 @@ export async function farmAPI(request, env, readBody) {
     if (p === "/api/farm/sites" && m === "POST") {
       const input = await readBody(request),
         v = data(input),
-        id = crypto.randomUUID();
+        id = operation.id || crypto.randomUUID();
       if (v.publish_mode === "root" && !input.domain_id)
         throw Error(
           "Escolha o domínio raiz. A distribuição automática usa somente subdomínios.",

@@ -1,7 +1,6 @@
 import TrafficFilters from "./TrafficFilters.jsx";
 import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import PeriodFilter, { periodQuery } from "./PeriodFilter.jsx";
-import FarmPanel from "./FarmPanel.jsx";
 import Login, { SessionActions } from "./Login.jsx";
 import DomainHealth from "./DomainHealth.jsx";
 import DomainsPanel from "./DomainsPanel.jsx";
@@ -228,7 +227,6 @@ function App() {
     ["Analytics", BarChart3],
     ["Acessos", Search],
     ["Domínios", Globe],
-    ["Farm BM", Globe],
   ];
   const filtered = links.filter((l) =>
     (l.name + " " + l.slug).toLowerCase().includes(search.toLowerCase()),
@@ -711,7 +709,6 @@ function App() {
               />
             </>
           )}
-          {page === "Farm BM" && <FarmPanel request={api} />}
           {page === "Acessos" && (
             <AccessLogs
               links={links}
