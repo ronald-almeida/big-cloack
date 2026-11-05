@@ -18,6 +18,8 @@ export async function farmCF(env, path, method = "GET", data) {
   });
   if (r.status >= 300 && r.status < 400)
     throw Error("A API Cloudflare retornou um redirecionamento inesperado.");
+  // Detaching a Worker custom domain succeeds with 204 and no JSON body.
+  if (method === "DELETE" && r.status === 204) return null;
   const result = await r.json();
   if (!r.ok || !result.success)
     throw Error(
