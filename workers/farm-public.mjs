@@ -1,4 +1,8 @@
 import { renderFarm } from "./farm-render.mjs";
+export const farmHostQuery = `SELECT s.*,d.hostname FROM farm_domains d JOIN farm_sites s ON s.domain_id=d.id
+ WHERE d.hostname=? AND s.publish_mode='root' AND d.active=1 AND s.published_data IS NOT NULL
+ UNION ALL SELECT s.*,d.hostname FROM farm_domains d JOIN farm_sites s ON s.domain_id=d.id
+ WHERE d.hostname=? AND s.subdomain=? AND s.publish_mode='subdomain' AND d.active=1 AND s.published_data IS NOT NULL LIMIT 1`;
 const farmPublic = {
   async fetch(request, env, { fallthrough = false } = {}) {
     const url = new URL(request.url);
@@ -11,9 +15,9 @@ const farmPublic = {
       return new Response("Método não permitido", { status: 405, headers });
     try {
       const site = await env.DB.prepare(
-        "SELECT s.*,d.hostname FROM farm_sites s JOIN farm_domains d ON d.id=s.domain_id WHERE (CASE WHEN s.publish_mode='root' THEN d.hostname ELSE s.subdomain||'.'||d.hostname END)=? AND d.active=1 AND s.published_data IS NOT NULL",
+        farmHostQuery,
       )
-        .bind(url.hostname)
+        .bind(url.hostname, url.hostname.split('.').slice(1).join('.'), url.hostname.split('.')[0])
         .first();
       if (!site)
         return fallthrough

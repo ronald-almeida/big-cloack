@@ -1,5 +1,6 @@
 import { farmAPI, unpublishFarm } from "./farm-api.mjs";
 import { farmHostname } from "../shared/farm.mjs";
+import { farmRows, farmReadError, invalidateFarmRead } from './farm-read-cache.mjs';
 
 export const bridgePath = "/api/operacao-farm";
 const json = (data, status = 200) =>
@@ -29,13 +30,13 @@ const owns = (record, actor) => {
   );
   return record;
 };
-const dateAt = (at) =>
-  new Intl.DateTimeFormat("en-CA", {
+const dateFormatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Bahia",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(at);
+  });
+const dateAt = at => dateFormatter.format(at);
 const labels = {
   "farm-site": "Edição",
   "farm-domain": "Domínio",
@@ -48,16 +49,9 @@ const labels = {
   "farm-verify": "Verificação",
 };
 
-export async function bridgeState(env, actor) {
-  const [ds, ss, hs, os, ops] = await env.DB.batch([
-    env.DB.prepare("SELECT * FROM farm_domains ORDER BY created_at DESC"),
-    env.DB.prepare("SELECT * FROM farm_sites ORDER BY created_at DESC"),
-    env.DB.prepare("SELECT * FROM farm_deployments ORDER BY created_at DESC"),
-    env.DB.prepare("SELECT * FROM farm_ownership"),
-    env.DB.prepare(
-      "SELECT * FROM farm_operations WHERE state='done' ORDER BY created_at DESC",
-    ),
-  ]);
+export async function bridgeState(env, actor, options) {
+  const snapshot = await farmRows(env, options);
+  const [ds, ss, hs, os, ops] = snapshot.rows;
   const ownership = (kind, id) =>
     os.results.find((o) => o.kind === kind && o.entity_id === id) || {
       owner: "ADMIN",
@@ -154,14 +148,15 @@ export async function bridgeState(env, actor) {
       version: 2,
       source: "cloudflare-d1",
       available: true,
-      writable: env.FARM_BRIDGE_MODE === "write",
+      writable: env.FARM_BRIDGE_MODE === "write" && !snapshot.error,
+      stale: !!snapshot.error,
+      fetchedAt: snapshot.at,
+      error: snapshot.error?.message,
+      errorCode: snapshot.error?.code,
+      retryAt: snapshot.error?.retryAt,
       domains,
-      sites:
-        actor.role === "admin"
-          ? sites
-          : sites.filter((s) => s.owner === actor.id),
+      sites,
       history: history
-        .filter((h) => actor.role === "admin" || h.owner === actor.id)
         .sort((a, b) => b.at - a.at),
     },
     events: events.filter(
@@ -219,7 +214,7 @@ async function command(env, actor, input) {
   );
   let claimed = false;
   try {
-    const { farm } = await bridgeState(env, { id: "ADMIN", role: "admin" });
+    const { farm } = await bridgeState(env, { id: "ADMIN", role: "admin" }, {fresh:true});
     const site = id ? farm.sites.find((s) => s.id === id) : null,
       domain = id ? farm.domains.find((d) => d.id === id) : null;
     if (cmd.startsWith("farm-domain")) {
@@ -376,6 +371,7 @@ async function command(env, actor, input) {
       console.error("farm_bridge_interrupted", requestId, error.name);
     throw error;
   } finally {
+    invalidateFarmRead(env);
     await env.DB.prepare(
       "UPDATE farm_bridge_lock SET lease=NULL,expires=0 WHERE id=1 AND lease=?",
     )
@@ -430,8 +426,14 @@ export async function farmBridge(request, env, readBody) {
     );
     return await command(env, actor, input);
   } catch (error) {
+    if (!error.status) {
+      error = farmReadError(error);
+      console.error('farm_bridge_unavailable', error.code);
+    }
     return json(
       {
+        code: error.code,
+        retryAt: error.retryAt,
         error: error.status
           ? error.message
           : "Não foi possível concluir a operação da Farm. Confira o estado antes de repetir.",

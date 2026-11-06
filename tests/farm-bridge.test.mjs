@@ -202,8 +202,9 @@ test("Farm bridge ownership, deterministic receipts, history and snapshots prese
     const av = await bridgeState(h.env, alice),
       bv = await bridgeState(h.env, bob);
     assert.equal(av.farm.sites[0].owner, alice.id);
-    assert.equal(bv.farm.sites.length, 0);
-    assert.equal(bv.farm.history.length, 0);
+    assert.equal(bv.farm.sites.length, 1);
+    assert.deepEqual(bv.farm.history, av.farm.history);
+    assert.equal(bv.events.length, 0);
     assert.equal(
       av.events.filter((e) => e.type === "Farm · Site criado").length,
       1,
