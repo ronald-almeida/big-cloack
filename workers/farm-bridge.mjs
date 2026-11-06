@@ -51,6 +51,9 @@ const labels = {
 
 export async function bridgeState(env, actor, options) {
   const snapshot = await farmRows(env, options);
+  if(!snapshot.error && options?.revision!==undefined && String(options.revision)===String(snapshot.revision))return {
+    farm:{source:'cloudflare-d1',revision:snapshot.revision,unchanged:true,available:true,writable:env.FARM_BRIDGE_MODE==='write',stale:false,fetchedAt:snapshot.at,sites:[],domains:[],history:[]},events:[]
+  };
   const [ds, ss, hs, os, ops] = snapshot.rows;
   const ownership = (kind, id) =>
     os.results.find((o) => o.kind === kind && o.entity_id === id) || {
@@ -146,6 +149,7 @@ export async function bridgeState(env, actor, options) {
   return {
     farm: {
       version: 2,
+      revision: snapshot.revision,
       source: "cloudflare-d1",
       available: true,
       writable: env.FARM_BRIDGE_MODE === "write" && !snapshot.error,
@@ -414,7 +418,7 @@ export async function farmBridge(request, env, readBody) {
       403,
     );
     if (input.action === "state") {
-      const result = await bridgeState(env, actor);
+      const result = await bridgeState(env, actor, {revision:input.revision});
       if (!canWrite) result.farm.writable = false;
       return json(result);
     }
