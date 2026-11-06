@@ -493,7 +493,7 @@ test("shared API serves only explicitly published Farm hosts and preserves authe
         throw Error("database unavailable");
       },
     };
-    assert.equal((await call(host + "/")).status, 401);
+    assert.equal((await call(host + "/")).status, 503);
   } finally {
     h.close();
   }

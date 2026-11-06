@@ -44,8 +44,8 @@ const farmPublic = {
             ),
         { headers: { ...headers, "Content-Type": "text/html; charset=utf-8" } },
       );
-    } catch {
-      if (fallthrough) return null;
+    } catch (error) {
+      console.error('farm_public_unavailable', error?.message, error?.cause?.message);
       return new Response("Site temporariamente indisponível", {
         status: 503,
         headers,

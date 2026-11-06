@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {farmRows,invalidateFarmRead} from '../workers/farm-read-cache.mjs';
 import {farmHostQuery} from '../workers/farm-public.mjs';
+import {tryFarmPublic} from '../workers/farm-public.mjs';
 import {harness} from './harness.mjs';
 
 test('shared Farm reads coalesce, expire, retain labelled last good data and back off on quota errors',async()=>{
@@ -25,4 +26,9 @@ test('public host lookup uses indexes instead of scanning every site',async()=>{
    assert(plan.some(r=>/SEARCH s USING INDEX/.test(r.detail)),JSON.stringify(plan));
    assert(!plan.some(r=>/SCAN [sd]\b/.test(r.detail)),JSON.stringify(plan));
  }finally{h.close();}
+});
+test('a public Farm database outage returns 503 instead of falling through to panel authentication',async()=>{
+ const env={DB:{prepare(){return {bind(){return {async first(){throw Error('D1 temporarily unavailable');}}}}}}};
+ const r=await tryFarmPublic(new Request('https://site.example/'),env);
+ assert.equal(r.status,503);assert.equal(await r.text(),'Site temporariamente indisponível');
 });
