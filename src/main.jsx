@@ -1,10 +1,12 @@
+import useLiveQuery, { getJSON } from "./useLiveQuery.js";
+import LiveStatus from "./LiveStatus.jsx";
 import TrafficFilters from "./TrafficFilters.jsx";
 import { TRAFFIC_CLASSES, BOT_PROVIDERS } from "../shared/traffic.mjs";
 import PeriodFilter, { periodQuery } from "./PeriodFilter.jsx";
 import Login, { SessionActions } from "./Login.jsx";
 import DomainHealth from "./DomainHealth.jsx";
 import DomainsPanel from "./DomainsPanel.jsx";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import {
   LayoutDashboard,
@@ -53,11 +55,9 @@ async function api(path, method = "GET", body) {
   if (!response.ok) throw new Error(data.error || "Não foi possível concluir.");
   return data;
 }
+const emptyItems = [];
 function App() {
   const [page, setPage] = useState("Visão geral"),
-    [links, setLinks] = useState([]),
-    [domains, setDomains] = useState([]),
-    [analytics, setAnalytics] = useState(null),
     [trafficFilters, setTrafficFilters] = useState({
       classification: "",
       bot_provider: "",
@@ -75,12 +75,37 @@ function App() {
     [selectedDomain, setSelectedDomain] = useState(""),
     [notice, setNotice] = useState(""),
     [error, setError] = useState(""),
-    [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
     [qr, setQr] = useState(null),
     [confirm, setConfirm] = useState(null);
   const rangeQuery = periodQuery(periodValue);
-  const refreshId = useRef(0);
+  const analyticsQuery = `${rangeQuery}&link=${encodeURIComponent(filter)}&${new URLSearchParams(page === "Analytics" ? trafficFilters : {})}`;
+  const live = useLiveQuery(
+    analyticsQuery,
+    async (signal, previous) => {
+      const [links, domains, analytics] = await Promise.all([
+        getJSON("/api/links?" + rangeQuery, signal),
+        getJSON("/api/domains", signal),
+        getJSON("/api/analytics?" + analyticsQuery, signal),
+      ]);
+      return {
+        links,
+        // Keep domain connection polling stable when only click counts change.
+        domains:
+          JSON.stringify(domains) === JSON.stringify(previous?.domains)
+            ? previous.domains
+            : domains,
+        analytics,
+      };
+    },
+    Boolean(rangeQuery) && page !== "Farm BM",
+  );
+  const links = live.data?.links || live.previousData?.links || emptyItems,
+    domains = live.data?.domains || live.previousData?.domains || emptyItems,
+    analytics = live.data?.analytics,
+    loading = live.loading,
+    refresh = live.refresh;
+  const displayError = error || live.error;
   const chartStart = analytics
     ? Math.floor(Date.parse(analytics.from) / 86400000) * 86400000
     : 0;
@@ -128,37 +153,6 @@ function App() {
       previous?.focus();
     };
   }, [modalOpen]);
-  async function refresh() {
-    const current = ++refreshId.current;
-    if (!rangeQuery) {
-      setAnalytics(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const [l, d, a] = await Promise.all([
-        api("links"),
-        api("domains"),
-        api(
-          `analytics?${rangeQuery}&link=${encodeURIComponent(filter)}&${new URLSearchParams(page === "Analytics" ? trafficFilters : {})}`,
-        ),
-      ]);
-      if (current !== refreshId.current) return;
-      setLinks(l);
-      setDomains(d);
-      setAnalytics(a);
-      setError("");
-    } catch (e) {
-      if (current !== refreshId.current) return;
-      setError(e.message);
-    } finally {
-      if (current === refreshId.current) setLoading(false);
-    }
-  }
-  useEffect(() => {
-    refresh();
-  }, [rangeQuery, filter, trafficFilters, page]);
   useEffect(() => {
     if (!activeDomains.some((d) => d.hostname === selectedDomain))
       setSelectedDomain(activeDomains[0]?.hostname || "");
@@ -314,14 +308,19 @@ function App() {
             )}
           </div>
           {page !== "Farm BM" && (
-            <PeriodFilter value={periodValue} onChange={setPeriodValue} />
+            <>
+              <PeriodFilter value={periodValue} onChange={setPeriodValue} />
+              {rangeQuery && <LiveStatus {...live} />}
+            </>
           )}
-          {error && (
+          {displayError && (
             <div role="alert" className="error">
-              {error}
-              <button aria-label="Fechar erro" onClick={() => setError("")}>
-                <X size={16} />
-              </button>
+              {displayError}
+              {error && (
+                <button aria-label="Fechar erro" onClick={() => setError("")}>
+                  <X size={16} />
+                </button>
+              )}
             </div>
           )}
           {notice && (
@@ -335,7 +334,7 @@ function App() {
               <div className="period">
                 <span>
                   {page === "Links"
-                    ? "Contadores gerais"
+                    ? "Acessos no período selecionado"
                     : "Resumo de desempenho"}
                 </span>
               </div>
@@ -373,7 +372,9 @@ function App() {
                         <Icon size={18} />
                       </span>
                     </div>
-                    <strong>{Number(value).toLocaleString("pt-BR")}</strong>
+                    <strong>
+                      {!live.data ? "—" : Number(value).toLocaleString("pt-BR")}
+                    </strong>
                     <small>{sub}</small>
                   </div>
                 ))}
@@ -453,7 +454,11 @@ function App() {
                     {page === "Links" ? "Seus links" : "Links recentes"}{" "}
                     <span className="count">{links.length}</span>
                   </h2>
-                  <p>Destinos e regras sob seu controle.</p>
+                  <p>
+                    {periodValue.preset === "all"
+                      ? "Todo o histórico de acessos de cada link."
+                      : "Acessos de cada link no período selecionado."}
+                  </p>
                 </div>
                 <div className="table-tools">
                   <label className="search">
@@ -485,7 +490,11 @@ function App() {
                       <th>LINK / DESTINO</th>
                       <th>MODO</th>
                       <th>DISPOSITIVO REAL</th>
-                      <th>ACESSOS TOTAIS</th>
+                      <th>
+                        {periodValue.preset === "all"
+                          ? "ACESSOS TOTAIS"
+                          : "ACESSOS NO PERÍODO"}
+                      </th>
                       <th>AÇÕES</th>
                     </tr>
                   </thead>
@@ -514,7 +523,7 @@ function App() {
                             }
                           </td>
                           <td className="number">
-                            {l.clicks.toLocaleString("pt-BR")}
+                            {live.data ? l.clicks.toLocaleString("pt-BR") : "—"}
                           </td>
                           <td>
                             <div className="actions">

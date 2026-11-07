@@ -1,30 +1,20 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
+import useLiveQuery, { getJSON } from "./useLiveQuery.js";
+import LiveStatus from "./LiveStatus.jsx";
 
 const labels = {
   captcha_shown: "Exibidas",
   captcha_passed: "Aprovadas",
   captcha_failed: "Falhas",
 };
-export default function CaptchaEvents({ request, rangeQuery, link }) {
-  const [data, setData] = useState(null),
-    [error, setError] = useState("");
-  useEffect(() => {
-    let active = true;
-    setData(null);
-    setError("");
-    request(
-      `captcha-events?${rangeQuery}&link=${encodeURIComponent(link || "")}`,
-    )
-      .then((value) => {
-        if (active) setData(value);
-      })
-      .catch(() => {
-        if (active) setError("Não foi possível carregar as verificações.");
-      });
-    return () => {
-      active = false;
-    };
-  }, [request, rangeQuery, link]);
+export default function CaptchaEvents({ rangeQuery, link }) {
+  const query = `${rangeQuery}&link=${encodeURIComponent(link || "")}`;
+  const live = useLiveQuery(
+    query,
+    (signal) => getJSON("/api/captcha-events?" + query, signal),
+    Boolean(rangeQuery),
+  );
+  const { data, error } = live;
   return (
     <section className="table-card padded">
       <h2>Verificação humana</h2>
@@ -32,7 +22,10 @@ export default function CaptchaEvents({ request, rangeQuery, link }) {
         Eventos de captcha no período e link selecionados. Não somam cliques e
         não alteram a classificação de tráfego.
       </p>
-      {error ? (
+      {rangeQuery && <LiveStatus {...live} />}
+      {!rangeQuery ? (
+        <p>Selecione um período válido.</p>
+      ) : error ? (
         <p role="alert">{error}</p>
       ) : !data ? (
         <p>Carregando...</p>

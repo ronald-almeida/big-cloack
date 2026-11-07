@@ -1,38 +1,19 @@
-import React, { useState, useEffect } from "react";
+import useLiveQuery, { getJSON } from "./useLiveQuery.js";
+import LiveStatus from "./LiveStatus.jsx";
+import React, { useState } from "react";
 import AccessLogs from "./AccessLogs.jsx";
 const date = (v) =>
   v ? new Date(v).toLocaleString("pt-BR") : "Ainda sem acessos";
 export default function DomainHealth({ links, domains, rangeQuery }) {
-  const [items, setItems] = useState([]),
-    [selected, setSelected] = useState(""),
-    [error, setError] = useState(""),
-    [loading, setLoading] = useState(true);
-  useEffect(() => {
-    const c = new AbortController();
-    setItems([]);
-    setError("");
-    setLoading(true);
-    if (!rangeQuery) {
-      setLoading(false);
-      return () => c.abort();
-    }
-    fetch("/api/domain-health?" + rangeQuery, { signal: c.signal })
-      .then(async (r) => {
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error);
-        return d;
-      })
-      .then((d) => {
-        if (!c.signal.aborted) setItems(d.items);
-      })
-      .catch((e) => {
-        if (!c.signal.aborted) setError(e.message);
-      })
-      .finally(() => {
-        if (!c.signal.aborted) setLoading(false);
-      });
-    return () => c.abort();
-  }, [rangeQuery, domains]);
+  const [selected, setSelected] = useState("");
+  const live = useLiveQuery(
+    rangeQuery,
+    (signal) => getJSON("/api/domain-health?" + rangeQuery, signal),
+    Boolean(rangeQuery),
+  );
+  const items = live.data?.items || [],
+    error = live.error,
+    loading = live.loading;
   return (
     <section className="domain-health">
       <div className="section-heading">
@@ -41,6 +22,7 @@ export default function DomainHealth({ links, domains, rangeQuery }) {
           <p>Criações, exclusões e acessos no período selecionado.</p>
         </div>
       </div>
+      {rangeQuery && <LiveStatus {...live} />}
       <details className="metric-help">
         <summary>Como as métricas são calculadas</summary>
         <p className="logs-timezone">

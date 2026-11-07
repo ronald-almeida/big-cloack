@@ -111,9 +111,16 @@ export default {
       if (path === "/api/cnpj" && request.method === "GET")
         return json(await lookupCnpj(u.searchParams.get("cnpj")));
       if (path === "/api/links" && request.method === "GET") {
+        // Preserve the all-time contract for older clients without a period.
+        const ranged = ["from", "to", "days", "period"].some((key) =>
+          u.searchParams.has(key),
+        );
+        const range = ranged ? period(u.searchParams) : null;
         const { results } = await env.DB.prepare(
-          "SELECT l.*, (SELECT COUNT(*) FROM clicks c WHERE c.link_id=l.id) AS clicks FROM links l ORDER BY created_at DESC LIMIT 1000",
-        ).all();
+          `SELECT l.*, (SELECT COUNT(*) FROM clicks c WHERE c.link_id=l.id ${range ? "AND c.created_at>=? AND c.created_at<?" : ""}) AS clicks FROM links l ORDER BY created_at DESC LIMIT 1000`,
+        )
+          .bind(...(range ? [range.from, range.to] : []))
+          .all();
         return json(
           results.map((l) => ({
             ...l,
@@ -295,6 +302,11 @@ export default {
       if (path === "/api/logs" && request.method === "GET") {
         const conditions = [],
           params = [];
+        if (u.searchParams.get("period") === "all") {
+          const range = period(u.searchParams);
+          conditions.push("c.created_at>=?", "c.created_at<?");
+          params.push(range.from, range.to);
+        }
         trafficFilters(u.searchParams, conditions, params, "c.");
         const hostname = u.searchParams.get("hostname");
         if (hostname) {
@@ -388,9 +400,6 @@ export default {
       }
       if (path === "/api/analytics" && request.method === "GET") {
         const range = period(u.searchParams);
-        const days = Math.ceil(
-          (Date.parse(range.to) - Date.parse(range.from)) / 86400000,
-        );
         const conditions = ["created_at>=?", "created_at<?"],
           params = [range.from, range.to];
         for (const [query, column] of [
@@ -427,6 +436,14 @@ export default {
           ),
         ]);
         const summary = results[0].results[0];
+        if (u.searchParams.get("period") === "all")
+          range.from = results[1].results[0]?.day
+            ? results[1].results[0].day + "T00:00:00.000Z"
+            : range.to.slice(0, 10) + "T00:00:00.000Z";
+        const days = Math.max(
+          1,
+          Math.ceil((Date.parse(range.to) - Date.parse(range.from)) / 86400000),
+        );
         summary.automated_percent = summary.total
           ? Math.round((summary.automated / summary.total) * 10000) / 100
           : 0;
